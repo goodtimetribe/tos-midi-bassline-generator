@@ -70,9 +70,12 @@
                 return;
             }
             const field = event.target;
-            body[field.dataset.property] = field.type === "number"
-                ? (field.value === "" ? null : Number(field.value))
-                : field.value;
+            if (field.type === "number" && field.value === "" && !schema.required?.includes(field.dataset.property))
+                delete body[field.dataset.property];
+            else
+                body[field.dataset.property] = field.type === "number"
+                    ? (field.value === "" ? null : Number(field.value))
+                    : field.value;
             const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
             setter.call(textarea, JSON.stringify(body, null, 2));
             textarea.dispatchEvent(new Event("input", { bubbles: true }));

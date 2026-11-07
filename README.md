@@ -94,15 +94,34 @@ directly. The `-o` option saves the MIDI response **on the client**:
 ```sh
 curl -X POST http://localhost:5080/api/generate \
   -H 'Content-Type: application/json' \
-  -d '{"rootNote":"A","scaleType":"Minor","style":"Acid","bpm":140,"bars":16}' \
+  -d '{"rootNote":"A","scaleType":"Minor","style":"Acid","bpm":140,"bars":16,"movement":70,"groove":80,"mutation":35,"tension":65,"repetition":85}' \
   -o bassline.mid
 ```
 
-All fields are required. Values are case-sensitive: `rootNote` is one of
+The root, scale, style, BPM and bars fields are required. Values are case-sensitive: `rootNote` is one of
 `A`, `B`, `C`, `D`, `E`, `F`, `G`; `scaleType` is `Major`, `Minor`, `Dorian`,
 or `Mixolydian`; and `style` is one of the returned presets. `bpm` is an integer
 from 40 to 250, and `bars` an integer from 1 to 256, inclusive. API input is
 intentionally narrower than the CLI and Core (which also support accidentals).
+The five optional integer dimensions range from 0 to 100. Omit a dimension or
+set it to `null` to use the selected style's default; individual values override
+only that dimension. In Core arrangements, defaults follow each section's style,
+while explicit overrides apply to every section.
+
+| Style | Movement | Groove | Mutation | Tension | Repetition |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Dreamy | 60 | 20 | 75 | 15 | 45 |
+| Pop | 40 | 50 | 25 | 20 | 80 |
+| Acid | 75 | 70 | 50 | 80 | 85 |
+| Rave | 65 | 55 | 35 | 60 | 70 |
+
+Movement increases scale traversal and intervals; groove adds syncopation,
+offbeat accents and rests; mutation evolves phrases over time; tension adds
+less stable tones and chromatic approaches; repetition favors recurring motifs
+and rhythms. Mutation and repetition are independent: high values for both
+produce a recurring theme that gradually evolves. Style also retains its
+characteristic density and note gate.
+
 Invalid input returns HTTP 400, for example
 `{"error":"BPM must be an integer between 40 and 250."}`. Unexpected failures
 return HTTP 500 and `{"error":"An unexpected error occurred."}`. A rate-limited
@@ -328,6 +347,9 @@ Omit `Sections` to use `Style` and `Bars` for a single section, or use
 `BasslineGenerator.Generation.BasslineGenerator.FullArrangement(barsPerSection)`.
 Sections are consecutive and total at most 4096 bars. BPM is 4–1000; velocity is
 1–127; velocity variation is 0–127; timing variation is 0–30 ticks; swing is
-0–0.5 of an eighth note. Humanization defaults to off. Notes are quantized when
+0–0.5 of an eighth note. The five optional musical dimensions are 0–100;
+when omitted, each section uses its style's defaults. Groove can accent offbeats
+above the base velocity, independently of the optional downbeat accent.
+Humanization defaults to off. Notes are quantized when
 timing variation and swing are zero. The exporter writes a conductor track
 containing tempo and time signature and a separate note track.

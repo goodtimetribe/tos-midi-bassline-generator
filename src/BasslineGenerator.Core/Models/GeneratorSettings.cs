@@ -8,6 +8,12 @@ public sealed class GeneratorSettings
     public int BPM { get; set; } = 140;
     public int Bars { get; set; } = 16;
     public SongWorld Style { get; set; } = SongWorld.Acid;
+    /// <summary>Optional 0–100 overrides; null uses the current section's style preset.</summary>
+    public int? Movement { get; set; }
+    public int? Groove { get; set; }
+    public int? Mutation { get; set; }
+    public int? Tension { get; set; }
+    public int? Repetition { get; set; }
     /// <summary>Zero-based MIDI channel (0–15).</summary>
     public int Channel { get; set; }
     public int Velocity { get; set; } = 100;

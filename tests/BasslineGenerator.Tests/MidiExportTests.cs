@@ -23,7 +23,7 @@ public class MidiExportTests
     [Fact]
     public void WritesTypeOneTempoChannelAndLength()
     {
-        var settings = new GeneratorSettings { Bars = 4, BPM = 120, Channel = 9, Velocity = 90, Seed = 1 };
+        var settings = new GeneratorSettings { Bars = 4, BPM = 120, Channel = 9, Velocity = 90, Groove = 0, Seed = 1 };
         var result = WorldSequencingTests.CreateGenerator().Generate(settings);
         var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mid");
         try

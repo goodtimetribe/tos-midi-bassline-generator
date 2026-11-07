@@ -35,23 +35,31 @@ public sealed class GenerateExamplesFilter : IOperationFilter
         operation.Responses["200"].Content["audio/midi"].Schema = new OpenApiSchema { Type = "string", Format = "binary" };
         json.Examples = new Dictionary<string, OpenApiExample>
         {
-            ["Acid"] = Example("Acid bassline", "A", "Minor", "Acid", 140, 16),
+            ["Acid"] = Example("Acid bassline with overrides", "A", "Minor", "Acid", 140, 16, true),
             ["Dreamy ambient"] = Example("Dreamy ambient", "D", "Dorian", "Dreamy", 95, 32),
             ["Pop"] = Example("Pop bassline", "C", "Major", "Pop", 120, 16),
             ["Rave"] = Example("Rave bassline", "E", "Minor", "Rave", 145, 64)
         };
     }
 
-    private static OpenApiExample Example(string summary, string root, string scale, string style, int bpm, int bars) => new()
+    private static OpenApiExample Example(string summary, string root, string scale, string style, int bpm, int bars, bool overrides = false)
     {
-        Summary = summary,
-        Value = new OpenApiObject
+        var value = new OpenApiObject
         {
             ["rootNote"] = new OpenApiString(root),
             ["scaleType"] = new OpenApiString(scale),
             ["style"] = new OpenApiString(style),
             ["bpm"] = new OpenApiInteger(bpm),
             ["bars"] = new OpenApiInteger(bars)
+        };
+        if (overrides)
+        {
+            value["movement"] = new OpenApiInteger(70);
+            value["groove"] = new OpenApiInteger(80);
+            value["mutation"] = new OpenApiInteger(35);
+            value["tension"] = new OpenApiInteger(65);
+            value["repetition"] = new OpenApiInteger(85);
         }
-    };
+        return new OpenApiExample { Summary = summary, Value = value };
+    }
 }

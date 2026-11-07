@@ -52,6 +52,8 @@ builder.Services.AddControllers().ConfigureApiBehaviorOptions(options =>
                 "style" => "Style is required and must be an available preset.",
                 "bpm" => "BPM must be an integer between 40 and 250.",
                 "bars" => "Bars must be an integer between 1 and 256.",
+                "movement" or "groove" or "mutation" or "tension" or "repetition"
+                    => "Musical dimensions must be integers between 0 and 100.",
                 _ => "Invalid request body or field value."
             }).FirstOrDefault() ?? "Invalid request body or field value.";
         return new BadRequestObjectResult(new ErrorResponse(error));

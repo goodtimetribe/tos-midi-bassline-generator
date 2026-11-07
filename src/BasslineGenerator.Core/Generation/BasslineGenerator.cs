@@ -31,6 +31,7 @@ public sealed class BasslineGenerator(SectionGenerator sections, MotifGenerator 
             throw new ArgumentException("Sections must contain 1–4096 bars in total.", nameof(settings));
         var presetMap = presets.ToDictionary(p => p.World);
         if (song.Any(s => !presetMap.ContainsKey(s.Style))) throw new ArgumentException("Unknown style.", nameof(settings));
+        foreach (var section in song) presetMap[section.Style].Dimensions.WithOverrides(settings).Validate();
         var random = settings.Seed is int seed ? new Random(seed) : new Random();
         var progression = ChordProgressionLibrary.Select(settings.Progression, settings.ScaleType, random);
         var motif = motifs.Generate(random);

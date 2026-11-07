@@ -4,6 +4,7 @@ namespace BasslineGenerator.Presets;
 public sealed class DreamyPreset : IPreset
 {
     public SongWorld World => SongWorld.Dreamy;
+    public MusicalDimensions Dimensions => new(60, 20, 75, 15, 45);
     public RhythmDensity Density => RhythmDensity.Sparse;
     public double MutationChance => 0.02;
     public double OctaveChance => 0.01;
