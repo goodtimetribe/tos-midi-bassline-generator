@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-publish:
+    name: Build, test, and publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore packages
+        run: dotnet restore
+
+      - name: Build solution
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Run tests
+        run: dotnet test --configuration Release --no-build
+
+      - name: Publish API
+        run: dotnet publish src/BasslineGenerator.Api -c Release -o "${{ runner.temp }}/basslinegenerator-api"
+
+      - name: Upload API artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: basslinegenerator-api
+          path: ${{ runner.temp }}/basslinegenerator-api
+          retention-days: 7
+          if-no-files-found: error

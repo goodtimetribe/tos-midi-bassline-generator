@@ -142,6 +142,86 @@ authentication, file storage, or session state. Its application logs contain
 fixed operational messages, not musical data or exception details. Clients and
 intermediaries remain responsible for their own handling of the response.
 
+## CI/CD architecture
+
+GitHub Actions runs CI on pull requests and pushes to `main`, or manually from
+**Actions → CI**: it restores, builds, and tests the solution with the .NET 10
+SDK, then publishes the API. The `basslinegenerator-api` workflow artifact is
+retained for seven days.
+
+The deployment workflow runs on pushes to `main` and can also be started
+manually from **Actions → Deploy API** using the `main` branch. It runs the
+same CI checks before connecting to the VPS over SSH. On the VPS it pulls
+`main`, publishes to `/opt/basslinegenerator`, restarts the
+`basslinegenerator` systemd service, and checks both service status and the
+public health endpoint. A push to `main` therefore runs CI twice: once as
+the normal CI workflow and once as a deployment prerequisite. The artifact
+is for inspection or download; deployment publishes from the VPS checkout.
+
+### Developer flow
+
+```text
+Create branch → Pull request → GitHub Actions build/test → Merge to main
+  → Validate deployment commit → Automatic deploy → Health check
+```
+
+Configure branch protection or a ruleset to require the CI check before
+merging. A manual deployment also validates `main` before deploying it.
+
+### Deployment setup
+
+The existing Ubuntu VPS must have the .NET 10 SDK, `git`, `curl`, Apache,
+and the configured `basslinegenerator` systemd service. The SSH deployment
+user needs:
+
+- A clean checkout of this repository on the `main` branch at
+  `/usr/local/src/tos-midi-bassline-generator`, with an `origin` remote and
+  non-interactive GitHub read access for `git pull --ff-only origin main`.
+- Write access to the checkout and `/opt/basslinegenerator`, and permission
+  to run `sudo -n systemctl restart basslinegenerator` without a password.
+  Limit the sudo permission to that command. The service must run the API
+  from `/opt/basslinegenerator`.
+- A configured SSH authorized key for the deployment key. Keep production
+  settings in the service environment or another location outside the
+  publish directory: publishing may overwrite files in that directory.
+
+In the repository's **Settings → Secrets and variables → Actions**, add
+these repository secrets:
+
+| Secret | Value |
+| --- | --- |
+| `VPS_HOST` | VPS hostname or IP address, reachable over SSH on port 22. |
+| `VPS_USERNAME` | SSH deployment user. |
+| `VPS_SSH_KEY` | Private SSH key authorized for that user on the VPS. |
+| `VPS_KNOWN_HOSTS` | SSH `known_hosts` entry for the VPS, with its host key fingerprint verified through a trusted channel. |
+
+Use the VPS's actual SSH host key, not the deployment user's key. Verify its
+fingerprint independently before adding the `known_hosts` entry; update the
+secret if the server host key is intentionally rotated.
+
+Deployments are serialized and refuse a dirty checkout or a checkout that
+does not match the commit that passed validation. If `main` advances while
+an older deployment is waiting, that deployment can fail instead of deploying
+untested code; the newer push starts its own deployment. Publishing is
+in-place and there is no automatic rollback.
+
+### Deployment troubleshooting
+
+- Check the failed job and step under **Actions**. Build or test failures
+  prevent deployment; fix them before retrying.
+- For SSH failures, check the secrets, authorized key, network access, and
+  independently verified host key. For Git failures, check the server's
+  `origin` credentials, branch, clean working tree, and fast-forward status.
+- For publish or restart failures, check the VPS .NET SDK, directory
+  ownership, and passwordless sudo permission. Inspect
+  `sudo systemctl status basslinegenerator` and
+  `sudo journalctl -u basslinegenerator -n 100 --no-pager` on the VPS.
+- If the health check fails, inspect the service and Apache logs, then check
+  `curl --fail --show-error https://bassapi.beyond-earth.net/api/health` from
+  the VPS. Check Apache and Cloudflare routing and ensure the endpoint is not
+  served from cache. A failed health check does not undo the deployment;
+  resolve the issue or manually restore a known-good version.
+
 ## Musical model
 
 Notes use 4/4 time and a 480 PPQ grid. Rhythms are weighted selections of
