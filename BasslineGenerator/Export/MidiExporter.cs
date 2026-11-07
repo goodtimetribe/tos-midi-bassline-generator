@@ -33,4 +33,10 @@ public sealed class MidiExporter : IMidiExporter
     }
 
     public void Save(MidiFile midiFile, string path) => midiFile.Write(path, true, MidiFileFormat.MultiTrack);
+
+    public void SaveNew(MidiFile midiFile, string path)
+    {
+        using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
+        midiFile.Write(stream, MidiFileFormat.MultiTrack);
+    }
 }

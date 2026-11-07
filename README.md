@@ -16,9 +16,26 @@ dotnet run --project BasslineGenerator
 
 Alternatively, run `dotnet run` from the `BasslineGenerator` directory. Choose
 single section or full arrangement, style (for a single section), key, scale,
-BPM, bars and progression. Confirm with `Y` to write `bassline.mid` in the
-current working directory. An existing file with that name is overwritten.
-The program displays the actual progression and motif selected.
+BPM, bars and progression. Confirm with `Y` to write a uniquely named
+`bassline-<id>.mid` file in the current working directory. Existing files are
+not overwritten. The program displays the output path and the actual
+progression and motif selected.
+
+### Command-line options
+
+Use `--help` (or `-h`) to list all options, accepted values, and progression
+names. Any omitted option is requested interactively; style is only used for a
+single section. For example, to generate without prompts:
+
+```sh
+dotnet run --project BasslineGenerator -- --mode single --style acid --key A --scale minor --bpm 140 --bars 16 --progression "i - VI - III - VII" --yes
+```
+
+Mode, style, and scale also accept the numbers shown in their prompts.
+Progression accepts its displayed number, `random`, or its exact, case-sensitive
+name. Use `--confirm yes` or `--confirm no` to answer the generation prompt
+explicitly; `--yes` is shorthand for `--confirm yes`. Options may also be
+written as `--option=value`. Invalid options or values produce an error.
 
 ## Musical model
 
@@ -76,6 +93,9 @@ var settings = new GeneratorSettings
 var result = generator.Generate(settings);
 exporter.Save(result.MidiFile, "bassline.mid");
 ```
+
+`Save` overwrites an existing file at the specified path. Use `SaveNew` to
+create a file only if the path does not already exist.
 
 Omit `Sections` to use `Style` and `Bars` for a single section, or use
 `BasslineGenerator.Generation.BasslineGenerator.FullArrangement(barsPerSection)`.
