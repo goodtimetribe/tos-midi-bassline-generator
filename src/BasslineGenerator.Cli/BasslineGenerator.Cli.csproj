@@ -8,12 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="Tests/**/*.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Melanchall.DryWetMidi" Version="8.0.3" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.11" />
+    <ProjectReference Include="../BasslineGenerator.Core/BasslineGenerator.Core.csproj" />
   </ItemGroup>
 
 </Project>

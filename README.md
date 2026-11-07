@@ -1,8 +1,13 @@
 # BasslineGenerator
 
-A .NET 10 console application for generating motif-based electronic basslines as
-standard MIDI type 1 files. Import the resulting MIDI into a DAW or a compatible
-MIDI workflow and assign it to a bass instrument.
+A .NET 10 library and console application for generating motif-based electronic
+basslines as standard MIDI type 1 files. Import the resulting MIDI into a DAW or
+a compatible MIDI workflow and assign it to a bass instrument.
+
+`src/BasslineGenerator.Core` contains the reusable generation and MIDI logic;
+`src/BasslineGenerator.Cli` handles console interaction and references Core.
+`tests/BasslineGenerator.Tests` tests Core independently of the CLI. Core can
+also be referenced by an ASP.NET Core API, web backend, or desktop application.
 
 ## Build and run
 
@@ -11,10 +16,10 @@ Install the .NET 10 SDK, then from the repository root:
 ```sh
 dotnet build
 dotnet test
-dotnet run --project BasslineGenerator
+dotnet run --project src/BasslineGenerator.Cli
 ```
 
-Alternatively, run `dotnet run` from the `BasslineGenerator` directory. Choose
+Alternatively, run `dotnet run` from the `src/BasslineGenerator.Cli` directory. Choose
 single section or full arrangement, style (for a single section), key, scale,
 BPM, bars and progression. Confirm with `Y` to write `bassline.mid` in the
 current working directory. An existing file with that name is overwritten.
@@ -42,21 +47,15 @@ progressions according to the scale.
 
 ## Programmatic use
 
-The generator is constructed through interfaces and presets, or can be created
-directly:
+Reference `BasslineGenerator.Core` and construct the generator directly:
 
 ```csharp
 using BasslineGenerator.Export;
 using BasslineGenerator.Generation;
-using BasslineGenerator.Interfaces;
 using BasslineGenerator.Models;
-using BasslineGenerator.Presets;
 
 var exporter = new MidiExporter();
-var generator = new BasslineGenerator.Generation.BasslineGenerator(
-    new SectionGenerator(new RhythmGenerator(), new BassMovementGenerator()),
-    new MotifGenerator(), exporter,
-    new IPreset[] { new DreamyPreset(), new PopPreset(), new AcidPreset(), new RavePreset() });
+var generator = new BasslineGenerator.Generation.BasslineGenerator();
 var settings = new GeneratorSettings
 {
     RootNote = "A", ScaleType = "Minor", BPM = 140, Style = SongWorld.Acid,
@@ -74,8 +73,16 @@ var settings = new GeneratorSettings
     ]
 };
 var result = generator.Generate(settings);
-exporter.Save(result.MidiFile, "bassline.mid");
+exporter.Save(result, "bassline.mid");
 ```
+
+`Generate` does not write to disk. Its result exposes the notes, in-memory MIDI
+file, selected motif, progression, sections, key, scale, requested style, BPM,
+total bar count and note statistics. For arrangements, `Style` is the requested
+settings value; the actual style of each part is in `Sections`. Use
+`IMidiExporter` to abstract saving, or save the returned MIDI file separately.
+For custom presets or rhythm generation, use the generator constructor accepting
+the section generator, motif generator, MIDI file factory, and presets.
 
 Omit `Sections` to use `Style` and `Bars` for a single section, or use
 `BasslineGenerator.Generation.BasslineGenerator.FullArrangement(barsPerSection)`.

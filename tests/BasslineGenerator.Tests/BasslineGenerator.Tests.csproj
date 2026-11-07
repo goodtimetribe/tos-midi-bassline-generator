@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\BasslineGenerator.csproj" />
+    <ProjectReference Include="../../src/BasslineGenerator.Core/BasslineGenerator.Core.csproj" />
   </ItemGroup>
 
 </Project>

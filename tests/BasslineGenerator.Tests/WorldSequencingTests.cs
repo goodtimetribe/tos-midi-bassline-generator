@@ -12,7 +12,7 @@ public class WorldSequencingTests
 {
     internal static Generator CreateGenerator() => new(
         new SectionGenerator(new RhythmGenerator(), new BassMovementGenerator()),
-        new MotifGenerator(), new MidiExporter(),
+        new MotifGenerator(), new MidiFileFactory(),
         new IPreset[] { new DreamyPreset(), new PopPreset(), new AcidPreset(), new RavePreset() });
 
     [Fact]
@@ -45,5 +45,41 @@ public class WorldSequencingTests
         Assert.Throws<ArgumentOutOfRangeException>(() => generator.Generate(new GeneratorSettings { Swing = double.NaN }));
         Assert.Throws<ArgumentOutOfRangeException>(() => generator.Generate(new GeneratorSettings { Channel = 16 }));
         Assert.Throws<ArgumentException>(() => generator.Generate(new GeneratorSettings { Sections = [] }));
+    }
+
+    [Fact]
+    public void DefaultGeneratorReturnsMetadataAndStatisticsForAnArrangement()
+    {
+        var settings = new GeneratorSettings
+        {
+            RootNote = "Bb", ScaleType = "Dorian", Style = SongWorld.Rave, BPM = 125, Seed = 7,
+            Sections = [new("Intro", SongWorld.Dreamy, 2), new("Drop", SongWorld.Acid, 3)]
+        };
+        var result = new Generator().Generate(settings);
+        settings.RootNote = "C";
+        settings.BPM = 140;
+
+        Assert.Equal("Bb", result.Key);
+        Assert.Equal("Dorian", result.ScaleType);
+        Assert.Equal(SongWorld.Rave, result.Style);
+        Assert.Equal(125, result.BPM);
+        Assert.Equal(5, result.BarCount);
+        Assert.Equal(new[] { SongWorld.Dreamy, SongWorld.Acid }, result.Sections.Select(s => s.Style));
+        Assert.Same(result.Motif, Assert.Single(result.SelectedMotifs));
+        Assert.Equal(result.Notes.Count, result.Statistics.NoteCount);
+        Assert.Equal(result.Notes.Min(n => n.Pitch), result.Statistics.LowestPitch);
+        Assert.Equal(result.Notes.Max(n => n.Pitch), result.Statistics.HighestPitch);
+        Assert.NotNull(result.MidiFile);
+    }
+
+    [Fact]
+    public void DefaultAndCustomConstructionProduceTheSameSeededOutput()
+    {
+        var settings = new GeneratorSettings { Seed = 42, Bars = 4 };
+        var expected = CreateGenerator().Generate(settings);
+        var actual = new Generator().Generate(settings);
+        Assert.Equal(expected.Notes, actual.Notes);
+        Assert.Equal(expected.Progression, actual.Progression);
+        Assert.Equal(expected.Motif.Name, actual.Motif.Name);
     }
 }

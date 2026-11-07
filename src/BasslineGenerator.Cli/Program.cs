@@ -1,24 +1,7 @@
 ﻿using BasslineGenerator.Export;
 using BasslineGenerator.Generation;
-using BasslineGenerator.Interfaces;
 using BasslineGenerator.Models;
 using BasslineGenerator.MusicTheory;
-using BasslineGenerator.Presets;
-using Microsoft.Extensions.DependencyInjection;
-
-var services = new ServiceCollection()
-    .AddSingleton<IRhythmGenerator, RhythmGenerator>()
-    .AddSingleton<BassMovementGenerator>()
-    .AddSingleton<MotifGenerator>()
-    .AddSingleton<SectionGenerator>()
-    .AddSingleton<MidiExporter>()
-    .AddSingleton<IMidiExporter>(sp => sp.GetRequiredService<MidiExporter>())
-    .AddSingleton<IBassGenerator, BasslineGenerator.Generation.BasslineGenerator>()
-    .AddSingleton<IPreset, DreamyPreset>()
-    .AddSingleton<IPreset, PopPreset>()
-    .AddSingleton<IPreset, AcidPreset>()
-    .AddSingleton<IPreset, RavePreset>()
-    .BuildServiceProvider();
 
 try
 {
@@ -50,8 +33,8 @@ try
         Progression = progression == 0 ? null : ChordProgressionLibrary.All[progression - 1].Name,
         Sections = mode == 2 ? BasslineGenerator.Generation.BasslineGenerator.FullArrangement(bars) : null
     };
-    var result = services.GetRequiredService<IBassGenerator>().Generate(settings);
-    services.GetRequiredService<IMidiExporter>().Save(result.MidiFile, "bassline.mid");
+    var result = new BasslineGenerator.Generation.BasslineGenerator().Generate(settings);
+    new MidiExporter().Save(result, "bassline.mid");
     Console.WriteLine($"Style: {string.Join(" → ", result.Sections.Select(s => s.Style))}");
     Console.WriteLine($"Key: {root}\nScale: {settings.ScaleType}\nBars: {result.Sections.Sum(s => s.Bars)}\nBPM: {bpm}");
     Console.WriteLine($"Progression: {result.Progression}\nGenerated Motifs: {result.Motif.Name}\nOutput File: {Path.GetFullPath("bassline.mid")}");
