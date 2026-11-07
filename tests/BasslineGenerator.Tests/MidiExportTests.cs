@@ -1,4 +1,5 @@
 using BasslineGenerator.Export;
+using BasslineGenerator.Interfaces;
 using BasslineGenerator.Models;
 using BasslineGenerator.MusicTheory;
 using Melanchall.DryWetMidi.Core;
@@ -15,7 +16,8 @@ public class MidiExportTests
         var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mid");
         try
         {
-            new MidiExporter().Save(result.MidiFile, path);
+            IMidiExporter exporter = new MidiExporter();
+            exporter.Save(result, path);
             var bytes = File.ReadAllBytes(path);
             Assert.Equal(new byte[] { 0, 1 }, bytes[8..10]);
             var file = MidiFile.Read(path);

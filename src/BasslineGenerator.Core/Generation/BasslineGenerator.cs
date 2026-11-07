@@ -7,8 +7,15 @@ using BasslineGenerator.Presets;
 namespace BasslineGenerator.Generation;
 
 /// <summary>Coordinates a continuous progression and recurring motif across sections.</summary>
-public sealed class BasslineGenerator(SectionGenerator sections, MotifGenerator motifs, MidiExporter exporter, IEnumerable<IPreset> presets) : IBassGenerator
+public sealed class BasslineGenerator(SectionGenerator sections, MotifGenerator motifs, MidiFileFactory midiFiles, IEnumerable<IPreset> presets) : IBassGenerator
 {
+    public BasslineGenerator() : this(
+        new SectionGenerator(new RhythmGenerator(), new BassMovementGenerator()),
+        new MotifGenerator(), new MidiFileFactory(),
+        [new DreamyPreset(), new PopPreset(), new AcidPreset(), new RavePreset()])
+    {
+    }
+
     public GenerationResult Generate(GeneratorSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -36,7 +43,9 @@ public sealed class BasslineGenerator(SectionGenerator sections, MotifGenerator 
             notes.AddRange(sections.Generate(section, firstBar, root, scale, progression, motif, presetMap[section.Style], settings, random, ref previous));
             firstBar += section.Bars;
         }
-        return new GenerationResult(exporter.Create(notes, settings.BPM, settings.Channel, firstBar), notes, motif, progression.Name, song);
+        return new GenerationResult(midiFiles.Create(notes, settings.BPM, settings.Channel, firstBar),
+            notes, motif, progression.Name, song, settings.RootNote, settings.ScaleType,
+            settings.Style, settings.BPM, firstBar);
     }
 
     /// <summary>Creates an arrangement; bars specifies the length of each part.</summary>
