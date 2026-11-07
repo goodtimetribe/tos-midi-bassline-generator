@@ -5,8 +5,16 @@ using Melanchall.DryWetMidi.Core;
 namespace BasslineGenerator.Export;
 
 /// <summary>Writes generated MIDI as a type 1 file.</summary>
-public sealed class MidiExporter : IMidiExporter
+public sealed class MidiExporter : IMidiExporter, IStreamMidiExporter
 {
+    /// <summary>Writes MIDI to a caller-owned stream without closing it.</summary>
+    public void Write(GenerationResult result, Stream stream)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(stream);
+        result.MidiFile.Write(stream, MidiFileFormat.MultiTrack);
+    }
+
     public void Save(GenerationResult result, string path)
     {
         ArgumentNullException.ThrowIfNull(result);
