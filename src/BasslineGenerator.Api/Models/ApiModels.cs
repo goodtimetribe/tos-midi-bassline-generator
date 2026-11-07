@@ -31,6 +31,31 @@ public sealed class GenerateRequest
     /// <example>16</example>
     [Required, Range(1, 256, ErrorMessage = "Bars must be between 1 and 256.")]
     public int? Bars { get; set; }
+
+    /// <summary>Movement from root-focused (0) to melodic scale traversal and wider intervals (100). Omit to use the style preset.</summary>
+    /// <example>70</example>
+    [Range(0, 100)]
+    public int? Movement { get; set; }
+
+    /// <summary>Groove from straight downbeats (0) to syncopation, offbeat accents and rests (100). Omit to use the style preset.</summary>
+    /// <example>80</example>
+    [Range(0, 100)]
+    public int? Groove { get; set; }
+
+    /// <summary>Mutation from consistent phrases (0) to evolving motifs and section variations (100). Omit to use the style preset.</summary>
+    /// <example>35</example>
+    [Range(0, 100)]
+    public int? Mutation { get; set; }
+
+    /// <summary>Tension from consonant chord tones (0) to unstable scale tones and chromatic approaches (100). Omit to use the style preset.</summary>
+    /// <example>65</example>
+    [Range(0, 100)]
+    public int? Tension { get; set; }
+
+    /// <summary>Repetition from changing phrases (0) to recurring motifs and rhythms (100). Omit to use the style preset.</summary>
+    /// <example>85</example>
+    [Range(0, 100)]
+    public int? Repetition { get; set; }
 }
 
 /// <summary>A safe, human-readable error response.</summary>

@@ -77,6 +77,48 @@ public class ApiTests
     }
 
     [Theory]
+    [InlineData("movement")]
+    [InlineData("groove")]
+    [InlineData("mutation")]
+    [InlineData("tension")]
+    [InlineData("repetition")]
+    public async Task MusicalDimensionsValidateEachField(string name)
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        foreach (var value in new[] { "0", "100", "null", "-1", "101", "1.5", "\"private input\"" })
+        {
+            var body = $$"""{"rootNote":"A","scaleType":"Minor","style":"Acid","bpm":140,"bars":1,"{{name}}":{{value}}}""";
+            using var response = await client.PostAsync("/api/generate", new StringContent(body, Encoding.UTF8, "application/json"));
+            Assert.Equal(value is "0" or "100" or "null" ? HttpStatusCode.OK : HttpStatusCode.BadRequest, response.StatusCode);
+            if (response.StatusCode == HttpStatusCode.BadRequest)
+                Assert.DoesNotContain("private input", await response.Content.ReadAsStringAsync());
+        }
+    }
+
+    [Fact]
+    public async Task GenerateForwardsOptionalDimensions()
+    {
+        var generator = new CapturingGenerator();
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IBassGenerator>();
+                services.AddSingleton<IBassGenerator>(generator);
+            }));
+        using var client = factory.CreateClient();
+        using var response = await client.PostAsJsonAsync("/api/generate", new
+        {
+            rootNote = "A", scaleType = "Minor", style = "Acid", bpm = 140, bars = 1,
+            movement = 70, groove = 80, mutation = 35, tension = 65, repetition = 85
+        });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(generator.Settings);
+        Assert.Equal((70, 80, 35, 65, 85), (generator.Settings.Movement, generator.Settings.Groove,
+            generator.Settings.Mutation, generator.Settings.Tension, generator.Settings.Repetition));
+    }
+
+    [Theory]
     [InlineData("{\"rootNote\":\"C#\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":16}", "Root note")]
     [InlineData("{\"rootNote\":\"A\\n\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":16}", "Root note")]
     [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Natural Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":16}", "Scale type")]
@@ -284,6 +326,15 @@ public class ApiTests
         Assert.Equal(250, properties.GetProperty("bpm").GetProperty("maximum").GetInt32());
         Assert.Equal(1, properties.GetProperty("bars").GetProperty("minimum").GetInt32());
         Assert.Equal(256, properties.GetProperty("bars").GetProperty("maximum").GetInt32());
+        foreach (var name in new[] { "movement", "groove", "mutation", "tension", "repetition" })
+        {
+            var property = properties.GetProperty(name);
+            Assert.Equal("integer", property.GetProperty("type").GetString());
+            Assert.Equal(0, property.GetProperty("minimum").GetInt32());
+            Assert.Equal(100, property.GetProperty("maximum").GetInt32());
+            Assert.False(string.IsNullOrWhiteSpace(property.GetProperty("description").GetString()));
+            Assert.True(property.TryGetProperty("example", out _));
+        }
 
         var examples = generate.GetProperty("requestBody").GetProperty("content")
             .GetProperty("application/json").GetProperty("examples");
@@ -302,6 +353,16 @@ public class ApiTests
     private sealed class ThrowingGenerator : IBassGenerator
     {
         public GenerationResult Generate(GeneratorSettings settings) => throw new InvalidOperationException("private input");
+    }
+
+    private sealed class CapturingGenerator : IBassGenerator
+    {
+        public GeneratorSettings? Settings { get; private set; }
+        public GenerationResult Generate(GeneratorSettings settings)
+        {
+            Settings = settings;
+            return new Generation.BasslineGenerator().Generate(settings);
+        }
     }
 
     private sealed class TestAddressFilter : IStartupFilter

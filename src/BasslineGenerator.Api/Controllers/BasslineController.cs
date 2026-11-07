@@ -61,7 +61,12 @@ public sealed class BasslineController(
             ScaleType = request.ScaleType!,
             Style = preset.World,
             BPM = request.Bpm!.Value,
-            Bars = request.Bars!.Value
+            Bars = request.Bars!.Value,
+            Movement = request.Movement,
+            Groove = request.Groove,
+            Mutation = request.Mutation,
+            Tension = request.Tension,
+            Repetition = request.Repetition
         };
         // The result and stream are request-local; no MIDI or settings are persisted.
         var result = generator.Generate(settings);
