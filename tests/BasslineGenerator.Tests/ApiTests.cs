@@ -212,12 +212,16 @@ public class ApiTests
         Assert.Equal(allowed, response.Headers.Contains("Access-Control-Allow-Origin"));
     }
 
-    [Fact]
-    public async Task SwaggerIsDevelopmentOnlyAndDocumentsMidi()
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Production")]
+    public async Task SwaggerIsAvailableAndDocumentsMidi(string environment)
     {
-        await using var development = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b.UseEnvironment("Development"));
-        using var client = development.CreateClient();
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/swagger/index.html")).StatusCode);
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b.UseEnvironment(environment));
+        using var client = factory.CreateClient();
+        using var ui = await client.GetAsync("/swagger/index.html");
+        Assert.Equal(HttpStatusCode.OK, ui.StatusCode);
+        Assert.Contains("bassline-form", await ui.Content.ReadAsStringAsync());
         using var document = JsonDocument.Parse(await client.GetStringAsync("/swagger/v1/swagger.json"));
         var generate = document.RootElement.GetProperty("paths").GetProperty("/api/generate").GetProperty("post");
         Assert.True(generate.GetProperty("requestBody").GetProperty("content").TryGetProperty("application/json", out _));
@@ -226,9 +230,6 @@ public class ApiTests
         Assert.True(generate.GetProperty("responses").GetProperty("400").GetProperty("content").TryGetProperty("application/json", out _));
         Assert.False(generate.GetProperty("responses").GetProperty("400").GetProperty("content").TryGetProperty("audio/midi", out _));
 
-        await using var production = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b.UseEnvironment("Production"));
-        using var productionClient = production.CreateClient();
-        Assert.Equal(HttpStatusCode.NotFound, (await productionClient.GetAsync("/swagger/index.html")).StatusCode);
         foreach (var path in new[] { "analyze", "variation", "arrangement" })
             Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsJsonAsync($"/api/{path}", ValidRequest)).StatusCode);
     }
