@@ -67,13 +67,22 @@ Swagger is only enabled in Development. Set `ASPNETCORE_ENVIRONMENT` and
 `ASPNETCORE_URLS` (or use standard ASP.NET Core configuration) for other
 environments and listen addresses.
 
+In Swagger, expand **Generation → POST /api/generate** and select **Try it out**
+to choose notes, scales, and styles from dropdowns and enter the tempo and
+length. The form updates the JSON request editor, which remains available for
+manual editing. The examples selector offers Dreamy ambient, Pop, Acid, and
+Rave starting points; selecting an example also updates the form.
+
 | Method and path | Description |
 | --- | --- |
 | `GET /api/health` | Returns `{"status":"healthy","version":"1.0.0"}`. |
 | `GET /api/presets` | Returns `["Dreamy","Pop","Acid","Rave"]`. |
 | `POST /api/generate` | Returns a downloadable `bassline.mid` with content type `audio/midi`. |
 
-Example request (the `-o` option saves the response **on the client**):
+### Generate Sample Bassline
+
+Select one of the four style examples in Swagger, or use this Acid example
+directly. The `-o` option saves the MIDI response **on the client**:
 
 ```sh
 curl -X POST http://localhost:5080/api/generate \

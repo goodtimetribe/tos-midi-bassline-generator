@@ -1,6 +1,7 @@
 using System.Threading.RateLimiting;
 using BasslineGenerator.Api.Configuration;
 using BasslineGenerator.Api.Models;
+using BasslineGenerator.Api.Swagger;
 using BasslineGenerator.Export;
 using BasslineGenerator.Generation;
 using BasslineGenerator.Interfaces;
@@ -81,7 +82,22 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
-    options.SwaggerDoc("v1", new OpenApiInfo { Title = "Bassline Generator API", Version = "1.0.0" });
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "Bassline Generator API",
+        Version = typeof(Program).Assembly.GetName().Version!.ToString(3),
+        Description = "Privacy-focused MIDI bassline generation service.\n\n" +
+            "Features: in-memory MIDI generation, no user accounts, no file persistence, Swagger documentation, and a REST API.\n\n" +
+            "## Generate Sample Bassline\n\n" +
+            "Use **Generation → POST /api/generate** and select **Try it out**. Choose a preset example, " +
+            "adjust the musical settings, and execute the request to download a MIDI file. " +
+            "The example selector includes Dreamy, Pop, Acid, and Rave.",
+        Contact = new OpenApiContact { Name = "GitHub repository", Url = new Uri("https://github.com/goodtimetribe/tos-midi-bassline-generator") },
+        License = new OpenApiLicense { Name = "GPL-3.0", Url = new Uri("https://www.gnu.org/licenses/gpl-3.0.html") }
+    });
+    options.TagActionsBy(api => [api.ActionDescriptor.RouteValues["action"] == "Health" ? "System" : "Generation"]);
+    options.SchemaFilter<GenerateRequestSchemaFilter>();
+    options.OperationFilter<GenerateExamplesFilter>();
     var xml = Path.Combine(AppContext.BaseDirectory, "BasslineGenerator.Api.xml");
     if (File.Exists(xml)) options.IncludeXmlComments(xml);
 });
@@ -110,7 +126,15 @@ app.Use(async (context, next) =>
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(options =>
+    {
+        using var script = typeof(Program).Assembly.GetManifestResourceStream("BasslineGenerator.Api.Swagger.generate-form.js")
+            ?? throw new InvalidOperationException("Swagger form script is missing.");
+        using var reader = new StreamReader(script);
+        options.HeadContent = $"<script>{reader.ReadToEnd()}</script>";
+        options.DocumentTitle = "Bassline Generator API";
+        options.DisplayRequestDuration();
+    });
 }
 app.UseRouting();
 app.UseCors();

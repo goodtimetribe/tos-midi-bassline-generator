@@ -233,6 +233,71 @@ public class ApiTests
             Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsJsonAsync($"/api/{path}", ValidRequest)).StatusCode);
     }
 
+    [Fact]
+    public async Task SwaggerDescribesContractAndProvidesRunnableExamples()
+    {
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b.UseEnvironment("Development"));
+        using var client = factory.CreateClient();
+        using var document = JsonDocument.Parse(await client.GetStringAsync("/swagger/v1/swagger.json"));
+        var root = document.RootElement;
+        var info = root.GetProperty("info");
+        Assert.Equal("Bassline Generator API", info.GetProperty("title").GetString());
+        Assert.Equal("1.0.0", info.GetProperty("version").GetString());
+        Assert.Contains("Privacy-focused", info.GetProperty("description").GetString());
+        Assert.Equal("GPL-3.0", info.GetProperty("license").GetProperty("name").GetString());
+
+        var paths = root.GetProperty("paths");
+        var health = paths.GetProperty("/api/health").GetProperty("get");
+        var presets = paths.GetProperty("/api/presets").GetProperty("get");
+        var generate = paths.GetProperty("/api/generate").GetProperty("post");
+        Assert.Equal("System", health.GetProperty("tags")[0].GetString());
+        Assert.Equal("Generation", presets.GetProperty("tags")[0].GetString());
+        Assert.Equal("Generation", generate.GetProperty("tags")[0].GetString());
+        Assert.Contains("in memory", generate.GetProperty("description").GetString());
+        foreach (var operation in new[] { health, presets, generate })
+        {
+            Assert.False(string.IsNullOrWhiteSpace(operation.GetProperty("summary").GetString()));
+            foreach (var status in new[] { "200", "429", "500" })
+                Assert.True(operation.GetProperty("responses").TryGetProperty(status, out _));
+        }
+        var responses = generate.GetProperty("responses");
+        Assert.True(responses.TryGetProperty("400", out _));
+        Assert.Equal("binary", responses.GetProperty("200").GetProperty("content").GetProperty("audio/midi")
+            .GetProperty("schema").GetProperty("format").GetString());
+
+        var schema = root.GetProperty("components").GetProperty("schemas").GetProperty("GenerateRequest");
+        Assert.Equal(new[] { "bars", "bpm", "rootNote", "scaleType", "style" },
+            schema.GetProperty("required").EnumerateArray().Select(e => e.GetString()).OrderBy(s => s).ToArray());
+        var properties = schema.GetProperty("properties");
+        foreach (var name in new[] { "rootNote", "scaleType", "style", "bpm", "bars" })
+        {
+            Assert.False(string.IsNullOrWhiteSpace(properties.GetProperty(name).GetProperty("description").GetString()));
+            Assert.True(properties.GetProperty(name).TryGetProperty("example", out _));
+        }
+        void CheckChoices(string name, string[] expected) => Assert.Equal(expected,
+            properties.GetProperty(name).GetProperty("enum").EnumerateArray().Select(e => e.GetString()));
+        CheckChoices("rootNote", ["A", "B", "C", "D", "E", "F", "G"]);
+        CheckChoices("scaleType", ["Major", "Minor", "Dorian", "Mixolydian"]);
+        CheckChoices("style", ["Dreamy", "Pop", "Acid", "Rave"]);
+        Assert.Equal(40, properties.GetProperty("bpm").GetProperty("minimum").GetInt32());
+        Assert.Equal(250, properties.GetProperty("bpm").GetProperty("maximum").GetInt32());
+        Assert.Equal(1, properties.GetProperty("bars").GetProperty("minimum").GetInt32());
+        Assert.Equal(256, properties.GetProperty("bars").GetProperty("maximum").GetInt32());
+
+        var examples = generate.GetProperty("requestBody").GetProperty("content")
+            .GetProperty("application/json").GetProperty("examples");
+        Assert.Equal(4, examples.EnumerateObject().Count());
+        foreach (var name in new[] { "Acid", "Dreamy ambient", "Pop", "Rave" })
+        {
+            using var response = await client.PostAsync("/api/generate",
+                new StringContent(examples.GetProperty(name).GetProperty("value").GetRawText(), Encoding.UTF8, "application/json"));
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal("audio/midi", response.Content.Headers.ContentType?.MediaType);
+        }
+        Assert.Contains("bassline-form", await client.GetStringAsync("/swagger/index.html"));
+        Assert.Contains("Generate Sample Bassline", info.GetProperty("description").GetString());
+    }
+
     private sealed class ThrowingGenerator : IBassGenerator
     {
         public GenerationResult Generate(GeneratorSettings settings) => throw new InvalidOperationException("private input");
