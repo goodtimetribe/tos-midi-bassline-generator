@@ -1,4 +1,5 @@
 using BasslineGenerator.Export;
+using BasslineGenerator.Interfaces;
 using BasslineGenerator.Models;
 using BasslineGenerator.MusicTheory;
 using Melanchall.DryWetMidi.Core;
@@ -15,7 +16,8 @@ public class MidiExportTests
         var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mid");
         try
         {
-            new MidiExporter().Save(result.MidiFile, path);
+            IMidiExporter exporter = new MidiExporter();
+            exporter.Save(result, path);
             var bytes = File.ReadAllBytes(path);
             Assert.Equal(new byte[] { 0, 1 }, bytes[8..10]);
             var file = MidiFile.Read(path);
@@ -37,16 +39,16 @@ public class MidiExportTests
     [Fact]
     public void SaveNewPreservesExistingFile()
     {
-        var midi = WorldSequencingTests.CreateGenerator().Generate(new GeneratorSettings { Seed = 1 }).MidiFile;
+        var result = WorldSequencingTests.CreateGenerator().Generate(new GeneratorSettings { Seed = 1 });
         var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mid");
         try
         {
-            var exporter = new MidiExporter();
-            exporter.SaveNew(midi, path);
+            IMidiExporter exporter = new MidiExporter();
+            exporter.SaveNew(result, path);
             var original = File.ReadAllBytes(path);
             Assert.Equal(MidiFileFormat.MultiTrack, MidiFile.Read(path).OriginalFormat);
 
-            Assert.Throws<IOException>(() => exporter.SaveNew(midi, path));
+            Assert.Throws<IOException>(() => exporter.SaveNew(result.MidiFile, path));
             Assert.Equal(original, File.ReadAllBytes(path));
         }
         finally { File.Delete(path); }

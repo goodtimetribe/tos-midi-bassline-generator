@@ -1,4 +1,3 @@
-using BasslineGenerator.Interfaces;
 using BasslineGenerator.Models;
 using BasslineGenerator.MusicTheory;
 using Melanchall.DryWetMidi.Common;
@@ -6,8 +5,8 @@ using Melanchall.DryWetMidi.Core;
 
 namespace BasslineGenerator.Export;
 
-/// <summary>Builds and writes a type 1 MIDI file with separate tempo and note tracks.</summary>
-public sealed class MidiExporter : IMidiExporter
+/// <summary>Builds a MIDI file with separate tempo and note tracks.</summary>
+public sealed class MidiFileFactory
 {
     public MidiFile Create(IReadOnlyList<BassNote> notes, int bpm, int channel, int bars)
     {
@@ -30,13 +29,5 @@ public sealed class MidiExporter : IMidiExporter
         }
         track.Events.Add(new MarkerEvent("End") { DeltaTime = Math.Max(0, (long)bars * MusicConstants.TicksPerBar - previous) });
         return new MidiFile(conductor, track) { TimeDivision = new TicksPerQuarterNoteTimeDivision(MusicConstants.Ppq) };
-    }
-
-    public void Save(MidiFile midiFile, string path) => midiFile.Write(path, true, MidiFileFormat.MultiTrack);
-
-    public void SaveNew(MidiFile midiFile, string path)
-    {
-        using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
-        midiFile.Write(stream, MidiFileFormat.MultiTrack);
     }
 }

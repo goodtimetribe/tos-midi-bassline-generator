@@ -98,7 +98,7 @@ internal sealed class CliOptions
     public static void PrintHelp()
     {
         Console.WriteLine("""
-            Usage: dotnet run --project BasslineGenerator -- [options]
+            Usage: dotnet run --project src/BasslineGenerator.Cli -- [options]
 
             Omitted options are requested interactively.
               --mode <single|arrangement>       1 or 2

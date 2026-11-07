@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using BasslineGenerator.Export;
 using Melanchall.DryWetMidi.Core;
 
 namespace BasslineGenerator.Tests;
@@ -134,7 +133,12 @@ public class CliArgumentTests : IDisposable
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
-        startInfo.ArgumentList.Add(typeof(MidiExporter).Assembly.Location);
+        startInfo.ArgumentList.Add("exec");
+        startInfo.ArgumentList.Add("--runtimeconfig");
+        startInfo.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "BasslineGenerator.Tests.runtimeconfig.json"));
+        startInfo.ArgumentList.Add("--depsfile");
+        startInfo.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "BasslineGenerator.Tests.deps.json"));
+        startInfo.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "BasslineGenerator.Cli.dll"));
         foreach (var arg in args) startInfo.ArgumentList.Add(arg);
         using var process = Process.Start(startInfo)!;
         var output = process.StandardOutput.ReadToEndAsync();
