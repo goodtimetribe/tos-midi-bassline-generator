@@ -21,7 +21,7 @@ public static class ChordProgressionLibrary
     public static ChordProgression Select(string? name, string scaleType, Random random)
     {
         if (name is not null)
-            return Progressions.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+            return Progressions.FirstOrDefault(p => p.Name.Equals(name, StringComparison.Ordinal))
                 ?? throw new ArgumentException("Unknown progression.", nameof(name));
         // The major and minor libraries retain their written chord qualities.
         var major = scaleType.Equals("Major", StringComparison.OrdinalIgnoreCase)

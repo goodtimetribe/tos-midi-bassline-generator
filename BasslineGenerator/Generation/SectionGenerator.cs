@@ -19,15 +19,18 @@ public sealed class SectionGenerator(IRhythmGenerator rhythm, BassMovementGenera
             var ending = bar % 4 == 3 || bar == section.Bars - 1;
             var onsets = ending ? pattern.Where(x => x < 12).ToArray() : pattern.ToArray();
             var chord = progression.Chords[(firstBar + bar) % progression.Chords.Count];
-            var starts = onsets.Select(step =>
+            var barStart = (long)(firstBar + bar) * MusicConstants.TicksPerBar;
+            var barEnd = barStart + MusicConstants.TicksPerBar;
+            var starts = new long[onsets.Length];
+            for (var i = 0; i < onsets.Length; i++)
             {
-                var tick = (long)(firstBar + bar) * MusicConstants.TicksPerBar + step * MusicConstants.Sixteenth;
+                var step = onsets[i];
+                var tick = barStart + step * MusicConstants.Sixteenth;
                 if (step % 4 == 2) tick += (long)(settings.Swing * MusicConstants.Ppq / 2);
                 if (settings.TimingVariation > 0 && step != 0)
                     tick += random.Next(-settings.TimingVariation, settings.TimingVariation + 1);
-                return tick;
-            }).ToArray();
-            var barEnd = (long)(firstBar + bar + 1) * MusicConstants.TicksPerBar;
+                starts[i] = Math.Clamp(tick, i == 0 ? barStart : starts[i - 1] + 1, barEnd - (onsets.Length - i));
+            }
             for (var i = 0; i < onsets.Length; i++)
             {
                 var choice = motif.Movements[i % motif.Movements.Count];
