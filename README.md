@@ -1,12 +1,12 @@
 # BasslineGenerator
 
-A .NET 9 console application for generating motif-based electronic basslines as
+A .NET 10 console application for generating motif-based electronic basslines as
 standard MIDI type 1 files. Import the resulting MIDI into a DAW or a compatible
 MIDI workflow and assign it to a bass instrument.
 
 ## Build and run
 
-Install the .NET 9 SDK, then from the repository root:
+Install the .NET 10 SDK, then from the repository root:
 
 ```sh
 dotnet build
