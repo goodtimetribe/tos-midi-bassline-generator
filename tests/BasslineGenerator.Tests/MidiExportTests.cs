@@ -9,6 +9,18 @@ namespace BasslineGenerator.Tests;
 public class MidiExportTests
 {
     [Fact]
+    public void WritesToCallerOwnedStream()
+    {
+        var result = WorldSequencingTests.CreateGenerator().Generate(new GeneratorSettings { Seed = 1 });
+        IStreamMidiExporter exporter = new MidiExporter();
+        using var stream = new MemoryStream();
+        exporter.Write(result, stream);
+        Assert.True(stream.CanWrite);
+        stream.Position = 0;
+        Assert.Equal(MidiFileFormat.MultiTrack, MidiFile.Read(stream).OriginalFormat);
+    }
+
+    [Fact]
     public void WritesTypeOneTempoChannelAndLength()
     {
         var settings = new GeneratorSettings { Bars = 4, BPM = 120, Channel = 9, Velocity = 90, Seed = 1 };
