@@ -37,6 +37,24 @@ public class MidiExportTests
     }
 
     [Fact]
+    public void SaveNewPreservesExistingFile()
+    {
+        var result = WorldSequencingTests.CreateGenerator().Generate(new GeneratorSettings { Seed = 1 });
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mid");
+        try
+        {
+            IMidiExporter exporter = new MidiExporter();
+            exporter.SaveNew(result, path);
+            var original = File.ReadAllBytes(path);
+            Assert.Equal(MidiFileFormat.MultiTrack, MidiFile.Read(path).OriginalFormat);
+
+            Assert.Throws<IOException>(() => exporter.SaveNew(result.MidiFile, path));
+            Assert.Equal(original, File.ReadAllBytes(path));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
     public void HumanizedNotesStayOrderedAndInsideSong()
     {
         var settings = new GeneratorSettings { Bars = 8, Seed = 8, TimingVariation = 30, VelocityVariation = 127, Swing = 0.5, AccentDownbeats = true };

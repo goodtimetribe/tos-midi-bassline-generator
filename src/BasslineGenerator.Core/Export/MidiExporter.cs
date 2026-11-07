@@ -18,4 +18,17 @@ public sealed class MidiExporter : IMidiExporter
         ArgumentNullException.ThrowIfNull(midiFile);
         midiFile.Write(path, true, MidiFileFormat.MultiTrack);
     }
+
+    public void SaveNew(GenerationResult result, string path)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        SaveNew(result.MidiFile, path);
+    }
+
+    public void SaveNew(MidiFile midiFile, string path)
+    {
+        ArgumentNullException.ThrowIfNull(midiFile);
+        using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
+        midiFile.Write(stream, MidiFileFormat.MultiTrack);
+    }
 }

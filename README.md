@@ -6,7 +6,7 @@ a compatible MIDI workflow and assign it to a bass instrument.
 
 `src/BasslineGenerator.Core` contains the reusable generation and MIDI logic;
 `src/BasslineGenerator.Cli` handles console interaction and references Core.
-`tests/BasslineGenerator.Tests` tests Core independently of the CLI. Core can
+`tests/BasslineGenerator.Tests` tests Core and CLI behavior. Core can
 also be referenced by an ASP.NET Core API, web backend, or desktop application.
 
 ## Build and run
@@ -21,9 +21,26 @@ dotnet run --project src/BasslineGenerator.Cli
 
 Alternatively, run `dotnet run` from the `src/BasslineGenerator.Cli` directory. Choose
 single section or full arrangement, style (for a single section), key, scale,
-BPM, bars and progression. Confirm with `Y` to write `bassline.mid` in the
-current working directory. An existing file with that name is overwritten.
-The program displays the actual progression and motif selected.
+BPM, bars and progression. Confirm with `Y` to write a uniquely named
+`bassline-<id>.mid` file in the current working directory. Existing files are
+not overwritten. The program displays the output path and the actual
+progression and motif selected.
+
+### Command-line options
+
+Use `--help` (or `-h`) to list all options, accepted values, and progression
+names. Any omitted option is requested interactively; style is only used for a
+single section. For example, to generate without prompts:
+
+```sh
+dotnet run --project src/BasslineGenerator.Cli -- --mode single --style acid --key A --scale minor --bpm 140 --bars 16 --progression "i - VI - III - VII" --yes
+```
+
+Mode, style, and scale also accept the numbers shown in their prompts.
+Progression accepts its displayed number, `random`, or its exact, case-sensitive
+name. Use `--confirm yes` or `--confirm no` to answer the generation prompt
+explicitly; `--yes` is shorthand for `--confirm yes`. Options may also be
+written as `--option=value`. Invalid options or values produce an error.
 
 ## Musical model
 
@@ -75,6 +92,10 @@ var settings = new GeneratorSettings
 var result = generator.Generate(settings);
 exporter.Save(result, "bassline.mid");
 ```
+
+`Save` overwrites an existing file at the specified path. Use `SaveNew` to
+create a file only if the path does not already exist. Both accept either the
+generation result or its in-memory MIDI file.
 
 `Generate` does not write to disk. Its result exposes the notes, in-memory MIDI
 file, selected motif, progression, sections, key, scale, requested style, BPM,

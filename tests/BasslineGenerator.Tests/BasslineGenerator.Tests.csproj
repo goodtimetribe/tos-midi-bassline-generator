@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/BasslineGenerator.Core/BasslineGenerator.Core.csproj" />
+    <ProjectReference Include="../../src/BasslineGenerator.Cli/BasslineGenerator.Cli.csproj" />
   </ItemGroup>
 
 </Project>
