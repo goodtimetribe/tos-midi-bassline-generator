@@ -1,5 +1,8 @@
 # BasslineGenerator
 
+[![CI](https://github.com/goodtimetribe/tos-midi-bassline-generator/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/goodtimetribe/tos-midi-bassline-generator/actions/workflows/ci.yml)
+[![Deploy API](https://github.com/goodtimetribe/tos-midi-bassline-generator/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/goodtimetribe/tos-midi-bassline-generator/actions/workflows/deploy.yml)
+
 A .NET 10 library, console application, and HTTP API for generating motif-based electronic
 basslines as standard MIDI type 1 files. Import the resulting MIDI into a DAW or
 a compatible MIDI workflow and assign it to a bass instrument.
@@ -63,7 +66,11 @@ dotnet run --project src/BasslineGenerator.Api
 
 The development launch profile listens at `http://localhost:5080`; open
 `http://localhost:5080/swagger` for interactive OpenAPI documentation.
-Swagger is only enabled in Development. Set `ASPNETCORE_ENVIRONMENT` and
+Swagger and its OpenAPI document are also publicly available in Production
+while the API is being developed, at
+`https://bassapi.beyond-earth.net/swagger` and `/swagger/v1/swagger.json`.
+They expose the API contract and allow visitors to submit requests; revisit
+this exposure before deploying sensitive endpoints. Set `ASPNETCORE_ENVIRONMENT` and
 `ASPNETCORE_URLS` (or use standard ASP.NET Core configuration) for other
 environments and listen addresses.
 
@@ -168,6 +175,22 @@ Create branch → Pull request → GitHub Actions build/test → Merge to main
 Configure branch protection or a ruleset to require the CI check before
 merging. A manual deployment also validates `main` before deploying it.
 
+### Production topology
+
+```text
+GitHub main -> Deploy API -> CI validation -> SSH -> VPS checkout
+                                                  -> dotnet publish -> /opt/basslinegenerator
+                                                  -> systemd restart -> public health check
+HTTP client -> Cloudflare / Apache -> basslinegenerator systemd service
+                                  -> API -> Core -> in-memory MIDI response
+```
+
+The VPS hosts the API behind Apache, with Cloudflare involved in public
+routing. The systemd service runs the published application; production
+configuration belongs outside the publish directory. There is no database or
+server-side MIDI storage. Deployment publishes in place, rather than swapping
+versioned releases, and may cause a brief interruption during restart.
+
 ### Deployment setup
 
 The existing Ubuntu VPS must have the .NET 10 SDK, `git`, `curl`, Apache,
@@ -204,6 +227,21 @@ does not match the commit that passed validation. If `main` advances while
 an older deployment is waiting, that deployment can fail instead of deploying
 untested code; the newer push starts its own deployment. Publishing is
 in-place and there is no automatic rollback.
+
+### Rollback
+
+Prefer reverting the faulty change on `main` and letting the normal deployment
+workflow validate and deploy the revert. Identify the last known-good commit
+and the changes to undo, then create a revert pull request (for a merge commit,
+select the appropriate mainline parent). After it merges, monitor **Actions →
+Deploy API** and verify `https://bassapi.beyond-earth.net/api/health` and the
+affected behavior. If deployment fails, use the troubleshooting steps below.
+
+Do not reset or detach the VPS checkout to an older commit: subsequent
+deployments require a clean `main` checkout and the validated commit. A failed
+health check does not restore the previous files; the service may remain
+unhealthy until a corrective deployment succeeds. Recovery also depends on the
+VPS, SSH access, and GitHub Actions being available.
 
 ### Deployment troubleshooting
 

@@ -123,19 +123,16 @@ app.Use(async (context, next) =>
         await context.Response.WriteAsJsonAsync(new ErrorResponse("An unexpected error occurred."));
     }
 });
-if (app.Environment.IsDevelopment())
+app.UseSwagger();
+app.UseSwaggerUI(options =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(options =>
-    {
-        using var script = typeof(Program).Assembly.GetManifestResourceStream("BasslineGenerator.Api.Swagger.generate-form.js")
-            ?? throw new InvalidOperationException("Swagger form script is missing.");
-        using var reader = new StreamReader(script);
-        options.HeadContent = $"<script>{reader.ReadToEnd()}</script>";
-        options.DocumentTitle = "Bassline Generator API";
-        options.DisplayRequestDuration();
-    });
-}
+    using var script = typeof(Program).Assembly.GetManifestResourceStream("BasslineGenerator.Api.Swagger.generate-form.js")
+        ?? throw new InvalidOperationException("Swagger form script is missing.");
+    using var reader = new StreamReader(script);
+    options.HeadContent = $"<script>{reader.ReadToEnd()}</script>";
+    options.DocumentTitle = "Bassline Generator API";
+    options.DisplayRequestDuration();
+});
 app.UseRouting();
 app.UseCors();
 app.UseRateLimiter();
