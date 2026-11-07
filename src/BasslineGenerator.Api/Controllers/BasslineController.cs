@@ -13,20 +13,36 @@ public sealed class BasslineController(
     IEnumerable<IPreset> presets,
     ILogger<BasslineController> logger) : ControllerBase
 {
-    /// <summary>Returns the API health and version.</summary>
+    /// <summary>Returns API health and version information.</summary>
+    /// <response code="200">The API is healthy.</response>
+    /// <response code="429">The rate limit was exceeded.</response>
+    /// <response code="500">An unexpected server error occurred.</response>
     [HttpGet("health")]
     [ProducesResponseType<HealthResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status429TooManyRequests)]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status500InternalServerError)]
     public ActionResult<HealthResponse> Health() => Ok(new HealthResponse("healthy", "1.0.0"));
 
-    /// <summary>Lists available bassline styles.</summary>
+    /// <summary>Returns available bassline generation styles.</summary>
+    /// <response code="200">The available case-sensitive style names.</response>
+    /// <response code="429">The rate limit was exceeded.</response>
+    /// <response code="500">An unexpected server error occurred.</response>
     [HttpGet("presets")]
     [ProducesResponseType<string[]>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status429TooManyRequests)]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status500InternalServerError)]
     public ActionResult<string[]> Presets() => Ok(presets.Select(p => p.World.ToString()).ToArray());
 
-    /// <summary>Generates and downloads a MIDI bassline without storing it.</summary>
+    /// <summary>Generates a MIDI bassline.</summary>
+    /// <remarks>Generates a MIDI file entirely in memory and returns it directly to the caller. No generated musical content is stored.</remarks>
+    /// <param name="request">Musical settings for the bassline.</param>
+    /// <response code="200">The generated MIDI file.</response>
+    /// <response code="400">The request is invalid.</response>
+    /// <response code="429">The rate limit was exceeded.</response>
+    /// <response code="500">An unexpected server error occurred.</response>
     [HttpPost("generate")]
     [Consumes("application/json")]
-    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK, "audio/midi")]
+    [ProducesResponseType(typeof(byte[]), StatusCodes.Status200OK, "audio/midi")]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest, "application/json")]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError, "application/json")]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status429TooManyRequests, "application/json")]

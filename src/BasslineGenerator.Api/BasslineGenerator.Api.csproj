@@ -7,6 +7,7 @@
     <NoWarn>$(NoWarn);1591</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Swagger/generate-form.js" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
     <ProjectReference Include="../BasslineGenerator.Core/BasslineGenerator.Core.csproj" />
   </ItemGroup>
