@@ -102,7 +102,8 @@ builder.Services.AddSwaggerGen(options =>
             "Features: in-memory MIDI generation, no user accounts, no file persistence, Swagger documentation, and a REST API.\n\n" +
             "## Generate Sample Bassline\n\n" +
             "Use **Generation → POST /api/generate** and select **Try it out**. Choose a preset example, " +
-            "adjust the musical settings, and execute the request to download a MIDI file. " +
+            "adjust the musical settings, and execute the request. For JSON responses, use **Download MIDI** " +
+            "to reproduce and download the same bassline. " +
             "The example selector includes Dreamy, Pop, Acid, and Rave.",
         Contact = new OpenApiContact { Name = "GitHub repository", Url = new Uri("https://github.com/goodtimetribe/tos-midi-bassline-generator") },
         License = new OpenApiLicense { Name = "GPL-3.0", Url = new Uri("https://www.gnu.org/licenses/gpl-3.0.html") }

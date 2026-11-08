@@ -84,6 +84,10 @@ manual editing. The examples selector offers Dreamy ambient, Pop, Acid, Rave,
 and custom-section starting points; selecting an example also updates the form.
 The progression dropdown shows friendly names and displays each selection's
 chord sequence, description, mood, and suggested use.
+With the default JSON response, select **Download MIDI** beside the response body
+to download the same bassline. This sends a second request using the returned
+seed and counts toward the API rate limit. Alternatively, select `audio/midi`
+as the response media type before executing to download MIDI directly.
 
 | Method and path | Description |
 | --- | --- |

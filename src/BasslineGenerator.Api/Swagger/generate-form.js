@@ -1,4 +1,58 @@
 (() => {
+    function installMidiDownload() {
+        const operation = document.getElementById("operations-Generation-post_api_generate");
+        const row = operation?.querySelector(".live-responses-table tbody tr.response");
+        const code = row?.querySelector(".highlight-code code.language-json");
+        if (!code || row.querySelector(".bassline-midi-download") ||
+            row.querySelector(".response-col_status")?.textContent.trim() !== "200") return;
+
+        const response = window.ui?.specSelectors.responseFor("/api/generate", "post")?.toJS();
+        if (response?.status !== 200 || !response.body?.request || !response.body.midiSha256 ||
+            !Number.isInteger(response.body.request.seed) ||
+            !code.textContent.includes(response.body.midiSha256)) return;
+
+        const container = document.createElement("div");
+        container.className = "bassline-midi-download";
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "btn";
+        button.textContent = "Download MIDI";
+        const message = document.createElement("span");
+        message.setAttribute("role", "status");
+        message.style.marginLeft = "8px";
+        container.append(button, message);
+        code.closest(".highlight-code").before(container);
+
+        button.addEventListener("click", async () => {
+            button.disabled = true;
+            message.textContent = "Preparing MIDI...";
+            try {
+                const current = window.ui.specSelectors.responseFor("/api/generate", "post")?.toJS();
+                if (current?.status !== 200 || !Number.isInteger(current.body?.request?.seed) ||
+                    !current.body?.midiSha256 || !code.textContent.includes(current.body.midiSha256))
+                    throw new Error("The displayed response has changed. Execute the request again.");
+                const result = await fetch(current.url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Accept": "audio/midi" },
+                    body: JSON.stringify(current.body.request)
+                });
+                if (!result.ok || result.headers.get("content-type")?.split(";")[0].trim() !== "audio/midi")
+                    throw new Error(`MIDI download failed (HTTP ${result.status}).`);
+                const url = URL.createObjectURL(await result.blob());
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = "bassline.mid";
+                link.click();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                message.textContent = "";
+            } catch (error) {
+                message.textContent = error instanceof Error ? error.message : "MIDI download failed.";
+            } finally {
+                button.disabled = false;
+            }
+        });
+    }
+
     function installForm() {
         const operation = document.getElementById("operations-Generation-post_api_generate");
         const textarea = operation?.querySelector(".body-param__text");
@@ -177,8 +231,12 @@
                 setTimeout(() => document.querySelector(".bassline-form")?.dispatchEvent(new Event("sync-example")), 0);
             }
         });
-        const observer = new MutationObserver(installForm);
+        const observer = new MutationObserver(() => {
+            installForm();
+            installMidiDownload();
+        });
         observer.observe(document.getElementById("swagger-ui"), { childList: true, subtree: true });
         installForm();
+        installMidiDownload();
     });
 })();

@@ -49,7 +49,7 @@ public sealed class BasslineController(
     /// <summary>Generates a MIDI bassline.</summary>
     /// <remarks>Generates a MIDI file entirely in memory and returns it directly to the caller. Send Accept: application/json for the effective configuration and statistics; use its seed to reproduce the MIDI. No generated musical content is stored.</remarks>
     /// <param name="request">Musical settings for the bassline.</param>
-    /// <response code="200">The generated MIDI file.</response>
+    /// <response code="200">The generated MIDI file or effective configuration and statistics.</response>
     /// <response code="400">The request is invalid.</response>
     /// <response code="429">The rate limit was exceeded.</response>
     /// <response code="500">An unexpected server error occurred.</response>
