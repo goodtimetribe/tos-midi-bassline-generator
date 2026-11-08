@@ -71,7 +71,15 @@ public sealed class GenerateExamplesFilter : IOperationFilter
             return;
 
         var json = operation.RequestBody.Content["application/json"];
-        operation.Responses["200"].Content["audio/midi"].Schema = new OpenApiSchema { Type = "string", Format = "binary" };
+        var responseContent = operation.Responses["200"].Content;
+        if (!responseContent.TryGetValue("audio/midi", out var midi))
+            responseContent["audio/midi"] = midi = new OpenApiMediaType();
+        midi.Schema = new OpenApiSchema { Type = "string", Format = "binary" };
+        operation.Responses["200"].Headers["X-Generation-Seed"] = new OpenApiHeader
+        {
+            Description = "Actual signed 32-bit seed used; returned for both MIDI and JSON responses.",
+            Schema = new OpenApiSchema { Type = "integer", Format = "int32" }
+        };
         json.Examples = new Dictionary<string, OpenApiExample>
         {
             ["Acid"] = Example("Phrygian acid bassline with overrides", "A", "Phrygian", "Acid", 140, 16, true),

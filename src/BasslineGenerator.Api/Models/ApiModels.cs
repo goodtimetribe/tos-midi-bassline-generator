@@ -178,6 +178,10 @@ public sealed class ProgressionAttribute : ValidationAttribute
 public sealed record ProgressionResponse(string Id, string Name, string Description,
     IReadOnlyList<string> ChordSequence, string Mood, string SuggestedUse);
 
+/// <summary>Generated bassline metadata and a hash for verifying replay; request with Accept: application/json.</summary>
+public sealed record GenerationResponse(GenerateRequest Request, GenerationConfiguration Configuration,
+    GenerationStatistics Statistics, string Motif, string Progression, int BarCount, string MidiSha256);
+
 /// <summary>A safe, human-readable error response.</summary>
 /// <param name="Error">Description of the error without the supplied input.</param>
 public sealed record ErrorResponse(string Error);

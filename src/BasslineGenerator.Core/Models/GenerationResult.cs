@@ -7,6 +7,9 @@ public sealed record GenerationResult(MidiFile MidiFile, IReadOnlyList<BassNote>
     Motif Motif, string Progression, IReadOnlyList<SongSection> Sections,
     string Key, string ScaleType, SongWorld Style, int BPM, int BarCount)
 {
+    /// <summary>The effective, reproducible configuration used to create this result.</summary>
+    public GenerationConfiguration Configuration { get; init; } = null!;
+
     /// <summary>The motif reused across the generated sections.</summary>
     public IReadOnlyList<Motif> SelectedMotifs => [Motif];
 
@@ -17,3 +20,15 @@ public sealed record GenerationResult(MidiFile MidiFile, IReadOnlyList<BassNote>
 }
 
 public sealed record GenerationStatistics(int NoteCount, int? LowestPitch, int? HighestPitch);
+
+/// <summary>Fully resolved generation settings, including a seed and each section's behavior.</summary>
+public sealed record GenerationConfiguration(
+    int Seed, string RootNote, string ScaleType, string Style, string Mode, int BPM, int Bars,
+    string? RequestedProgression, string ProgressionId, string ProgressionName, IReadOnlyList<string> ChordSequence,
+    int Channel, int Velocity, int VelocityVariation, int TimingVariation, double Swing, bool AccentDownbeats,
+    int? Movement, int? Groove, int? Mutation, int? Tension, int? Repetition,
+    IReadOnlyList<EffectiveSectionConfiguration> Sections);
+
+/// <summary>A section and its style defaults after all request overrides.</summary>
+public sealed record EffectiveSectionConfiguration(string Name, string Style, int Bars,
+    MusicalDimensions Behavior);

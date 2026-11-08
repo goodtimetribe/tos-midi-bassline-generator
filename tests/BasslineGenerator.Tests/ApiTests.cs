@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using System.Security.Cryptography;
 using System.Collections.Concurrent;
 using BasslineGenerator.Api.Models;
 using BasslineGenerator.Interfaces;
@@ -98,6 +99,7 @@ public class ApiTests
         Assert.Equal("audio/midi", response.Content.Headers.ContentType?.MediaType);
         Assert.Equal("bassline.mid", response.Content.Headers.ContentDisposition?.FileName?.Trim('"'));
         Assert.True(response.Headers.CacheControl?.NoStore);
+        Assert.True(int.TryParse(response.Headers.GetValues("X-Generation-Seed").Single(), out _));
         using var stream = new MemoryStream(await response.Content.ReadAsByteArrayAsync());
         var midi = MidiFile.Read(stream);
         Assert.Equal(MidiFileFormat.MultiTrack, midi.OriginalFormat);
@@ -105,6 +107,58 @@ public class ApiTests
         Assert.Equal((long)Math.Round(60_000_000.0 / bpm),
             midi.GetTrackChunks().First().Events.OfType<SetTempoEvent>().Single().MicrosecondsPerQuarterNote);
         Assert.Equal(bars * 4L * 480, midi.GetTrackChunks().Last().Events.Sum(e => e.DeltaTime));
+    }
+
+    [Fact]
+    public async Task JsonGenerationResponseReturnsReplayableEffectiveConfiguration()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/generate")
+        {
+            Content = JsonContent.Create(new
+            {
+                rootNote = "A", scaleType = "Minor", style = "Acid", bpm = 140, bars = 2,
+                movement = 90, progression = "Synthwave"
+            })
+        };
+        request.Headers.Accept.ParseAdd("application/json");
+        using var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = document.RootElement;
+        var configuration = root.GetProperty("configuration");
+        var seed = configuration.GetProperty("seed").GetInt32();
+        Assert.InRange(seed, 0, int.MaxValue);
+        Assert.Equal("A", configuration.GetProperty("rootNote").GetString());
+        Assert.Equal("Minor", configuration.GetProperty("scaleType").GetString());
+        Assert.Equal("Acid", configuration.GetProperty("style").GetString());
+        Assert.Equal("single", configuration.GetProperty("mode").GetString());
+        Assert.Equal(seed, root.GetProperty("request").GetProperty("seed").GetInt32());
+        Assert.Equal(90, configuration.GetProperty("movement").GetInt32());
+        Assert.Equal("synthwave", configuration.GetProperty("progressionId").GetString());
+        Assert.Equal("Synthwave", configuration.GetProperty("progressionName").GetString());
+        Assert.Equal(new[] { "i", "VI", "III", "VII" },
+            configuration.GetProperty("chordSequence").EnumerateArray().Select(chord => chord.GetString()));
+        var behavior = Assert.Single(configuration.GetProperty("sections").EnumerateArray())
+            .GetProperty("behavior");
+        Assert.Equal(90, behavior.GetProperty("movement").GetInt32());
+        Assert.Equal(70, behavior.GetProperty("groove").GetInt32());
+        Assert.Equal(50, behavior.GetProperty("mutation").GetInt32());
+        Assert.Equal(80, behavior.GetProperty("tension").GetInt32());
+        Assert.Equal(85, behavior.GetProperty("repetition").GetInt32());
+        Assert.True(root.GetProperty("statistics").GetProperty("noteCount").GetInt32() > 0);
+
+        using var replayRequest = new HttpRequestMessage(HttpMethod.Post, "/api/generate")
+        {
+            Content = new StringContent(root.GetProperty("request").GetRawText(), Encoding.UTF8, "application/json")
+        };
+        replayRequest.Headers.Accept.ParseAdd("audio/midi");
+        using var replay = await client.SendAsync(replayRequest);
+        Assert.Equal("audio/midi", replay.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(root.GetProperty("midiSha256").GetString(),
+            Convert.ToHexString(SHA256.HashData(await replay.Content.ReadAsByteArrayAsync())));
     }
 
     [Theory]
@@ -548,7 +602,8 @@ public class ApiTests
         var generate = document.RootElement.GetProperty("paths").GetProperty("/api/generate").GetProperty("post");
         Assert.True(generate.GetProperty("requestBody").GetProperty("content").TryGetProperty("application/json", out _));
         Assert.True(generate.GetProperty("responses").GetProperty("200").GetProperty("content").TryGetProperty("audio/midi", out _));
-        Assert.False(generate.GetProperty("responses").GetProperty("200").GetProperty("content").TryGetProperty("application/json", out _));
+        Assert.True(generate.GetProperty("responses").GetProperty("200").GetProperty("content").TryGetProperty("application/json", out _));
+        Assert.True(generate.GetProperty("responses").GetProperty("200").GetProperty("headers").TryGetProperty("X-Generation-Seed", out _));
         Assert.True(generate.GetProperty("responses").GetProperty("400").GetProperty("content").TryGetProperty("application/json", out _));
         Assert.False(generate.GetProperty("responses").GetProperty("400").GetProperty("content").TryGetProperty("audio/midi", out _));
 
@@ -588,6 +643,9 @@ public class ApiTests
         Assert.True(responses.TryGetProperty("400", out _));
         Assert.Equal("binary", responses.GetProperty("200").GetProperty("content").GetProperty("audio/midi")
             .GetProperty("schema").GetProperty("format").GetString());
+        Assert.True(responses.GetProperty("200").GetProperty("content").TryGetProperty("application/json", out _));
+        Assert.Equal("GenerationResponse", responses.GetProperty("200").GetProperty("content").GetProperty("application/json")
+            .GetProperty("schema").GetProperty("$ref").GetString()!.Split('/').Last());
 
         var schema = root.GetProperty("components").GetProperty("schemas").GetProperty("GenerateRequest");
         Assert.Equal(new[] { "bars", "bpm", "rootNote", "scaleType", "style" },

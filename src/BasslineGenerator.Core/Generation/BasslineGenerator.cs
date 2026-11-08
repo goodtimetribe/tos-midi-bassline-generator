@@ -32,7 +32,8 @@ public sealed class BasslineGenerator(SectionGenerator sections, MotifGenerator 
         var presetMap = presets.ToDictionary(p => p.World);
         if (song.Any(s => !presetMap.ContainsKey(s.Style))) throw new ArgumentException("Unknown style.", nameof(settings));
         foreach (var section in song) presetMap[section.Style].Dimensions.WithOverrides(settings).Validate();
-        var random = settings.Seed is int seed ? new Random(seed) : new Random();
+        var seed = settings.Seed ?? Random.Shared.Next();
+        var random = new Random(seed);
         var progression = ChordProgressionLibrary.Select(settings.Progression, settings.ScaleType, random);
         var motif = motifs.Generate(random);
         var root = 36 + NoteUtilities.PitchClass(settings.RootNote);
@@ -44,9 +45,20 @@ public sealed class BasslineGenerator(SectionGenerator sections, MotifGenerator 
             notes.AddRange(sections.Generate(section, firstBar, root, scale, progression, motif, presetMap[section.Style], settings, random, ref previous));
             firstBar += section.Bars;
         }
+        var effectiveSections = song.Select(section => new EffectiveSectionConfiguration(
+            section.Name, section.Style.ToString(), section.Bars,
+            presetMap[section.Style].Dimensions.WithOverrides(settings))).ToArray();
+        var configuration = new GenerationConfiguration(
+            seed, settings.RootNote, settings.ScaleType.Trim().Equals("Natural Minor", StringComparison.OrdinalIgnoreCase)
+                ? "Minor"
+                : ScaleLibrary.All.First(scaleType => scaleType.Name.Equals(settings.ScaleType, StringComparison.OrdinalIgnoreCase)).Name,
+            settings.Style.ToString(), settings.IsArrangement ? "arrangement" : settings.Sections is not null ? "custom" : "single",
+            settings.BPM, settings.Bars, settings.Progression, progression.Id, progression.DisplayName, progression.ChordSequence,
+            settings.Channel, settings.Velocity, settings.VelocityVariation, settings.TimingVariation, settings.Swing, settings.AccentDownbeats,
+            settings.Movement, settings.Groove, settings.Mutation, settings.Tension, settings.Repetition, effectiveSections);
         return new GenerationResult(midiFiles.Create(notes, settings.BPM, settings.Channel, firstBar),
             notes, motif, progression.Name, song, settings.RootNote, settings.ScaleType,
-            settings.Style, settings.BPM, firstBar);
+            settings.Style, settings.BPM, firstBar) { Configuration = configuration };
     }
 
     /// <summary>Creates an arrangement; bars specifies the length of each part.</summary>

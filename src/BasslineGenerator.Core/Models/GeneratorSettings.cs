@@ -20,6 +20,8 @@ public sealed class GeneratorSettings
     /// <summary>Progression name, or null for a seeded random choice.</summary>
     public string? Progression { get; set; }
     public int? Seed { get; set; }
+    /// <summary>Marks an arrangement generated from the built-in arrangement template.</summary>
+    public bool IsArrangement { get; set; }
     public int VelocityVariation { get; set; }
     public int TimingVariation { get; set; }
     /// <summary>Delay applied to offbeat eighth notes, from 0 to 0.5 of an eighth note.</summary>

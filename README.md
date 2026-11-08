@@ -53,7 +53,8 @@ dotnet run --project src/BasslineGenerator.Cli -- --mode single --style acid --k
 Mode, style, and scale also accept the numbers shown in their prompts.
 Progression accepts its displayed number, `random`, or its exact, case-sensitive
 display name, ID, or legacy chord sequence. The first six numeric choices retain
-their original meaning. Use `--confirm yes` or `--confirm no` to answer the generation prompt
+their original meaning. Pass `--seed <integer>` to make output reproducible; the
+actual seed is printed with the generation result. Use `--confirm yes` or `--confirm no` to answer the generation prompt
 explicitly; `--yes` is shorthand for `--confirm yes`. Options may also be
 written as `--option=value`. Invalid options or values produce an error.
 
@@ -89,7 +90,19 @@ chord sequence, description, mood, and suggested use.
 | `GET /api/health` | Returns `{"status":"healthy","version":"1.0.0"}`. |
 | `GET /api/presets` | Returns `["Dreamy","Pop","Acid","Rave"]`. |
 | `GET /api/progressions` | Returns progression IDs, names, descriptions, chord sequences, moods and suggested uses. |
-| `POST /api/generate` | Returns a downloadable `bassline.mid` with content type `audio/midi`. |
+| `POST /api/generate` | Returns a downloadable `bassline.mid` (`audio/midi`) by default, or effective generation metadata (`application/json`) when requested. |
+
+Generation remains a MIDI download by default for existing clients. To receive a
+JSON configuration instead, send `Accept: application/json` to the same endpoint.
+MIDI responses also include the generated seed in the `X-Generation-Seed` header.
+The response includes the generated seed, resolved progression, section styles
+and their effective behavior dimensions, MIDI settings, and note statistics.
+Its `request` object is ready to submit again with the returned seed.
+`configuration.requestedProgression` records the original optional value
+(including `null`), while `progressionId`, name, and chord sequence report the
+selected progression. `midiSha256` lets clients verify a replay. For
+arrangements, effective dimensions are included for every section because style
+defaults vary by section.
 
 For example, one entry in the progression response is:
 
