@@ -38,6 +38,22 @@ public class WorldSequencingTests
             result.Notes.Count(n => n.Start < 2L * MusicConstants.TicksPerBar));
     }
 
+    [Theory]
+    [InlineData("Synthwave", new[] { 45, 41, 36, 43, 45, 41 })]
+    [InlineData("Machine World", new[] { 45, 36, 38, 43, 45, 36 })]
+    [InlineData("Techno Minimal", new[] { 45, 45, 43, 45, 45, 45 })]
+    public void CuratedProgressionsDriveDownbeatsAndLoopAcrossSections(string progression, int[] expectedRoots)
+    {
+        var result = CreateGenerator().Generate(new GeneratorSettings
+        {
+            Seed = 14, RootNote = "A", ScaleType = "Minor", Progression = progression,
+            Movement = 0, Tension = 0, Mutation = 0, Repetition = 100,
+            Sections = [new("Intro", SongWorld.Dreamy, 3), new("Drop", SongWorld.Acid, 3)]
+        });
+        for (var bar = 0; bar < expectedRoots.Length; bar++)
+            Assert.Equal(expectedRoots[bar], Assert.Single(result.Notes, n => n.Start == bar * MusicConstants.TicksPerBar).Pitch);
+    }
+
     [Fact]
     public void ValidatesSettings()
     {
@@ -81,5 +97,60 @@ public class WorldSequencingTests
         Assert.Equal(expected.Notes, actual.Notes);
         Assert.Equal(expected.Progression, actual.Progression);
         Assert.Equal(expected.Motif.Name, actual.Motif.Name);
+    }
+
+    [Fact]
+    public void MissingSeedReturnsAReproducibleConfigurationWithResolvedOverrides()
+    {
+        var settings = new GeneratorSettings
+        {
+            RootNote = "A", ScaleType = "Minor", Style = SongWorld.Acid, Bars = 2,
+            Movement = 90, Groove = 25
+        };
+        var generator = CreateGenerator();
+        var first = generator.Generate(settings);
+        var replay = generator.Generate(new GeneratorSettings
+        {
+            RootNote = first.Configuration.RootNote,
+            ScaleType = first.Configuration.ScaleType,
+            Style = SongWorld.Acid,
+            Bars = first.Configuration.Bars,
+            Seed = first.Configuration.Seed,
+            Movement = first.Configuration.Movement,
+            Groove = first.Configuration.Groove,
+            Mutation = first.Configuration.Mutation,
+            Tension = first.Configuration.Tension,
+            Repetition = first.Configuration.Repetition,
+            Progression = first.Configuration.RequestedProgression
+        });
+
+        Assert.InRange(first.Configuration.Seed, 0, int.MaxValue);
+        Assert.Equal(first.Notes, replay.Notes);
+        Assert.Equal(first.Progression, replay.Progression);
+        Assert.Equal(first.Configuration.Seed, replay.Configuration.Seed);
+        Assert.Equal("single", first.Configuration.Mode);
+        Assert.NotEmpty(first.Configuration.ProgressionId);
+        var section = Assert.Single(first.Configuration.Sections);
+        Assert.Equal("Acid", section.Style);
+        Assert.Equal(new MusicalDimensions(90, 25, 50, 80, 85), section.Behavior);
+        Assert.Equal(90, first.Configuration.Movement);
+        Assert.Equal(25, first.Configuration.Groove);
+    }
+
+    [Fact]
+    public void ArrangementConfigurationResolvesEachSectionStyleAndMode()
+    {
+        var sections = Generator.FullArrangement(1);
+        var result = CreateGenerator().Generate(new GeneratorSettings
+        {
+            Seed = 42, Sections = sections, IsArrangement = true,
+            Movement = 90
+        });
+        Assert.Equal("arrangement", result.Configuration.Mode);
+        Assert.Equal(sections.Count, result.Configuration.Sections.Count);
+        Assert.Equal(new[] { "Dreamy", "Pop", "Dreamy", "Acid", "Rave", "Dreamy" },
+            result.Configuration.Sections.Select(section => section.Style));
+        Assert.All(result.Configuration.Sections, section => Assert.Equal(90, section.Behavior.Movement));
+        Assert.Equal(50, result.Configuration.Sections[1].Behavior.Groove);
     }
 }

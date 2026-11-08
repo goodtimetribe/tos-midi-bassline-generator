@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using System.Security.Cryptography;
 using System.Collections.Concurrent;
 using BasslineGenerator.Api.Models;
 using BasslineGenerator.Interfaces;
@@ -40,6 +41,45 @@ public class ApiTests
             await client.GetFromJsonAsync<string[]>("/api/presets"));
     }
 
+    [Fact]
+    public async Task ProgressionEndpointSerializesTheEntireLibrary()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        using var response = await client.GetAsync("/api/progressions");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Headers.CacheControl?.NoStore);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var items = document.RootElement.EnumerateArray().ToArray();
+        Assert.Equal(ChordProgressionLibrary.All.Count, items.Length);
+        for (var i = 0; i < items.Length; i++)
+        {
+            var p = ChordProgressionLibrary.All[i];
+            var item = items[i];
+            Assert.Equal(p.Id, item.GetProperty("id").GetString());
+            Assert.Equal(p.DisplayName, item.GetProperty("name").GetString());
+            Assert.Equal(p.Description, item.GetProperty("description").GetString());
+            Assert.Equal(p.ChordSequence, item.GetProperty("chordSequence").EnumerateArray().Select(c => c.GetString()));
+            Assert.Equal(p.Mood, item.GetProperty("mood").GetString());
+            Assert.Equal(p.SuggestedUse, item.GetProperty("suggestedUse").GetString());
+        }
+    }
+
+    [Theory]
+    [InlineData("Synthwave")]
+    [InlineData("machine-world")]
+    [InlineData("i - bVII - bVI - bVII")]
+    public async Task ProgressionNamesIdsAndLegacyValuesAreAccepted(string progression)
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        using var response = await client.PostAsJsonAsync("/api/generate", new
+        {
+            rootNote = "A", scaleType = "Minor", style = "Acid", bpm = 140, bars = 1, progression
+        });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     [Theory]
     [InlineData(30, 1)]
     [InlineData(300, 256)]
@@ -59,6 +99,7 @@ public class ApiTests
         Assert.Equal("audio/midi", response.Content.Headers.ContentType?.MediaType);
         Assert.Equal("bassline.mid", response.Content.Headers.ContentDisposition?.FileName?.Trim('"'));
         Assert.True(response.Headers.CacheControl?.NoStore);
+        Assert.True(int.TryParse(response.Headers.GetValues("X-Generation-Seed").Single(), out _));
         using var stream = new MemoryStream(await response.Content.ReadAsByteArrayAsync());
         var midi = MidiFile.Read(stream);
         Assert.Equal(MidiFileFormat.MultiTrack, midi.OriginalFormat);
@@ -66,6 +107,58 @@ public class ApiTests
         Assert.Equal((long)Math.Round(60_000_000.0 / bpm),
             midi.GetTrackChunks().First().Events.OfType<SetTempoEvent>().Single().MicrosecondsPerQuarterNote);
         Assert.Equal(bars * 4L * 480, midi.GetTrackChunks().Last().Events.Sum(e => e.DeltaTime));
+    }
+
+    [Fact]
+    public async Task JsonGenerationResponseReturnsReplayableEffectiveConfiguration()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/generate")
+        {
+            Content = JsonContent.Create(new
+            {
+                rootNote = "A", scaleType = "Minor", style = "Acid", bpm = 140, bars = 2,
+                movement = 90, progression = "Synthwave"
+            })
+        };
+        request.Headers.Accept.ParseAdd("application/json");
+        using var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = document.RootElement;
+        var configuration = root.GetProperty("configuration");
+        var seed = configuration.GetProperty("seed").GetInt32();
+        Assert.InRange(seed, 0, int.MaxValue);
+        Assert.Equal("A", configuration.GetProperty("rootNote").GetString());
+        Assert.Equal("Minor", configuration.GetProperty("scaleType").GetString());
+        Assert.Equal("Acid", configuration.GetProperty("style").GetString());
+        Assert.Equal("single", configuration.GetProperty("mode").GetString());
+        Assert.Equal(seed, root.GetProperty("request").GetProperty("seed").GetInt32());
+        Assert.Equal(90, configuration.GetProperty("movement").GetInt32());
+        Assert.Equal("synthwave", configuration.GetProperty("progressionId").GetString());
+        Assert.Equal("Synthwave", configuration.GetProperty("progressionName").GetString());
+        Assert.Equal(new[] { "i", "VI", "III", "VII" },
+            configuration.GetProperty("chordSequence").EnumerateArray().Select(chord => chord.GetString()));
+        var behavior = Assert.Single(configuration.GetProperty("sections").EnumerateArray())
+            .GetProperty("behavior");
+        Assert.Equal(90, behavior.GetProperty("movement").GetInt32());
+        Assert.Equal(70, behavior.GetProperty("groove").GetInt32());
+        Assert.Equal(50, behavior.GetProperty("mutation").GetInt32());
+        Assert.Equal(80, behavior.GetProperty("tension").GetInt32());
+        Assert.Equal(85, behavior.GetProperty("repetition").GetInt32());
+        Assert.True(root.GetProperty("statistics").GetProperty("noteCount").GetInt32() > 0);
+
+        using var replayRequest = new HttpRequestMessage(HttpMethod.Post, "/api/generate")
+        {
+            Content = new StringContent(root.GetProperty("request").GetRawText(), Encoding.UTF8, "application/json")
+        };
+        replayRequest.Headers.Accept.ParseAdd("audio/midi");
+        using var replay = await client.SendAsync(replayRequest);
+        Assert.Equal("audio/midi", replay.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(root.GetProperty("midiSha256").GetString(),
+            Convert.ToHexString(SHA256.HashData(await replay.Content.ReadAsByteArrayAsync())));
     }
 
     [Theory]
@@ -509,7 +602,8 @@ public class ApiTests
         var generate = document.RootElement.GetProperty("paths").GetProperty("/api/generate").GetProperty("post");
         Assert.True(generate.GetProperty("requestBody").GetProperty("content").TryGetProperty("application/json", out _));
         Assert.True(generate.GetProperty("responses").GetProperty("200").GetProperty("content").TryGetProperty("audio/midi", out _));
-        Assert.False(generate.GetProperty("responses").GetProperty("200").GetProperty("content").TryGetProperty("application/json", out _));
+        Assert.True(generate.GetProperty("responses").GetProperty("200").GetProperty("content").TryGetProperty("application/json", out _));
+        Assert.True(generate.GetProperty("responses").GetProperty("200").GetProperty("headers").TryGetProperty("X-Generation-Seed", out _));
         Assert.True(generate.GetProperty("responses").GetProperty("400").GetProperty("content").TryGetProperty("application/json", out _));
         Assert.False(generate.GetProperty("responses").GetProperty("400").GetProperty("content").TryGetProperty("audio/midi", out _));
 
@@ -533,12 +627,13 @@ public class ApiTests
         var paths = root.GetProperty("paths");
         var health = paths.GetProperty("/api/health").GetProperty("get");
         var presets = paths.GetProperty("/api/presets").GetProperty("get");
+        var progressions = paths.GetProperty("/api/progressions").GetProperty("get");
         var generate = paths.GetProperty("/api/generate").GetProperty("post");
         Assert.Equal("System", health.GetProperty("tags")[0].GetString());
         Assert.Equal("Generation", presets.GetProperty("tags")[0].GetString());
         Assert.Equal("Generation", generate.GetProperty("tags")[0].GetString());
         Assert.Contains("in memory", generate.GetProperty("description").GetString());
-        foreach (var operation in new[] { health, presets, generate })
+        foreach (var operation in new[] { health, presets, progressions, generate })
         {
             Assert.False(string.IsNullOrWhiteSpace(operation.GetProperty("summary").GetString()));
             foreach (var status in new[] { "200", "429", "500" })
@@ -548,6 +643,9 @@ public class ApiTests
         Assert.True(responses.TryGetProperty("400", out _));
         Assert.Equal("binary", responses.GetProperty("200").GetProperty("content").GetProperty("audio/midi")
             .GetProperty("schema").GetProperty("format").GetString());
+        Assert.True(responses.GetProperty("200").GetProperty("content").TryGetProperty("application/json", out _));
+        Assert.Equal("GenerationResponse", responses.GetProperty("200").GetProperty("content").GetProperty("application/json")
+            .GetProperty("schema").GetProperty("$ref").GetString()!.Split('/').Last());
 
         var schema = root.GetProperty("components").GetProperty("schemas").GetProperty("GenerateRequest");
         Assert.Equal(new[] { "bars", "bpm", "rootNote", "scaleType", "style" },
@@ -571,7 +669,20 @@ public class ApiTests
         Assert.Contains("0, 3, 5, 6, 7, 10", scaleDescription);
         CheckSuggestions("style", ["Dreamy", "Pop", "Acid", "Rave"]);
         CheckChoices("mode", ["single", "arrangement"]);
-        CheckChoices("progression", ChordProgressionLibrary.All.Select(p => p.Name).ToArray());
+        CheckSuggestions("progression", ChordProgressionLibrary.All.Select(p => p.DisplayName).ToArray());
+        var progressionSchema = properties.GetProperty("progression");
+        Assert.False(progressionSchema.TryGetProperty("enum", out _));
+        var details = progressionSchema.GetProperty("x-progression-details").EnumerateArray().ToArray();
+        Assert.Equal(ChordProgressionLibrary.All.Count, details.Length);
+        foreach (var p in ChordProgressionLibrary.All)
+        {
+            var item = Assert.Single(details, item => item.GetProperty("id").GetString() == p.Id);
+            Assert.Equal(p.DisplayName, item.GetProperty("name").GetString());
+            Assert.Equal(string.Join(" - ", p.ChordSequence), item.GetProperty("sequence").GetString());
+            Assert.Equal(p.Description, item.GetProperty("description").GetString());
+            Assert.Equal(p.SuggestedUse, item.GetProperty("suggestedUse").GetString());
+            Assert.Contains(p.DisplayName, progressionSchema.GetProperty("description").GetString());
+        }
         foreach (var name in new[] { "mode", "progression" })
         {
             Assert.False(string.IsNullOrWhiteSpace(properties.GetProperty(name).GetProperty("description").GetString()));

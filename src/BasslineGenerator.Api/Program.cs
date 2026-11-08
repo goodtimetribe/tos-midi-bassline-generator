@@ -21,7 +21,7 @@ builder.Services.AddOptions<RateLimitSettings>()
     .ValidateOnStart();
 var cors = builder.Configuration.GetSection("Cors").Get<CorsSettings>() ?? new CorsSettings();
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
-    policy.WithOrigins(cors.AllowedOrigins).AllowAnyHeader().AllowAnyMethod()));
+    policy.WithOrigins(cors.AllowedOrigins).AllowAnyHeader().AllowAnyMethod().WithExposedHeaders("X-Generation-Seed")));
 
 builder.Services.AddSingleton<IPreset, DreamyPreset>();
 builder.Services.AddSingleton<IPreset, PopPreset>();

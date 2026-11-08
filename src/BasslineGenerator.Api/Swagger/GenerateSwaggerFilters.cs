@@ -29,7 +29,25 @@ public sealed class GenerateRequestSchemaFilter(IEnumerable<IPreset> presets) : 
             ScaleLibrary.All.Select(s => $"- **{s.Name}**: {s.Mood} Intervals: {string.Join(", ", s.Intervals)}."));
         SetSuggestions(schema.Properties["style"], presets.Select(p => p.World.ToString()));
         SetChoices(schema.Properties["mode"], GenerationModes.All);
-        SetChoices(schema.Properties["progression"], ChordProgressionLibrary.All.Select(p => p.Name));
+        var progression = schema.Properties["progression"];
+        SetSuggestions(progression, ChordProgressionLibrary.All.Select(p => p.DisplayName));
+        progression.Description = "Choose a case-sensitive name, ID, or legacy chord sequence; omit for a random progression. " +
+            "Chord tones are constrained to the selected scale, so non-diatonic chords may be adjusted.\n\n" +
+            string.Join("\n\n", ChordProgressionLibrary.All.Select(p =>
+                $"- **{p.DisplayName}** (`{string.Join(" - ", p.ChordSequence)}`): {p.Description} Use: {p.SuggestedUse} Mood: {p.Mood}. ID: `{p.Id}`."));
+        var details = new OpenApiArray();
+        foreach (var p in ChordProgressionLibrary.All)
+            details.Add(new OpenApiObject
+            {
+                ["name"] = new OpenApiString(p.DisplayName),
+                ["id"] = new OpenApiString(p.Id),
+                ["legacy"] = new OpenApiString(p.Name),
+                ["sequence"] = new OpenApiString(string.Join(" - ", p.ChordSequence)),
+                ["description"] = new OpenApiString(p.Description),
+                ["suggestedUse"] = new OpenApiString(p.SuggestedUse),
+                ["mood"] = new OpenApiString(p.Mood)
+            });
+        progression.Extensions["x-progression-details"] = details;
     }
 
     private static void SetChoices(OpenApiSchema schema, IEnumerable<string> values)
@@ -53,7 +71,15 @@ public sealed class GenerateExamplesFilter : IOperationFilter
             return;
 
         var json = operation.RequestBody.Content["application/json"];
-        operation.Responses["200"].Content["audio/midi"].Schema = new OpenApiSchema { Type = "string", Format = "binary" };
+        var responseContent = operation.Responses["200"].Content;
+        if (!responseContent.TryGetValue("audio/midi", out var midi))
+            responseContent["audio/midi"] = midi = new OpenApiMediaType();
+        midi.Schema = new OpenApiSchema { Type = "string", Format = "binary" };
+        operation.Responses["200"].Headers["X-Generation-Seed"] = new OpenApiHeader
+        {
+            Description = "Actual signed 32-bit seed used; returned for both MIDI and JSON responses.",
+            Schema = new OpenApiSchema { Type = "integer", Format = "int32" }
+        };
         json.Examples = new Dictionary<string, OpenApiExample>
         {
             ["Acid"] = Example("Phrygian acid bassline with overrides", "A", "Phrygian", "Acid", 140, 16, true),
@@ -90,7 +116,7 @@ public sealed class GenerateExamplesFilter : IOperationFilter
         if (arrangement)
         {
             value["mode"] = new OpenApiString(GenerationModes.Arrangement);
-            value["progression"] = new OpenApiString("I - V - vi - IV");
+            value["progression"] = new OpenApiString("Pop Anthem");
         }
         if (overrides)
         {

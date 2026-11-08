@@ -30,7 +30,10 @@ try
     {
         Console.WriteLine("Progression: 0. Random");
         for (var i = 0; i < ChordProgressionLibrary.All.Count; i++)
-            Console.WriteLine($"{i + 1}. {ChordProgressionLibrary.All[i].Name}");
+        {
+            var p = ChordProgressionLibrary.All[i];
+            Console.WriteLine($"{i + 1}. {p.DisplayName} ({string.Join(" - ", p.ChordSequence)}) — {p.Description} {p.SuggestedUse}");
+        }
     }
     var progression = options.Progression ?? AskInt("Select progression", 0, ChordProgressionLibrary.All.Count);
     var confirm = options.Confirm ?? Ask("Generate MIDI? (Y/N)").Equals("Y", StringComparison.OrdinalIgnoreCase);
@@ -39,7 +42,9 @@ try
     {
         RootNote = root, ScaleType = ScaleLibrary.All[scale - 1].Name,
         BPM = bpm, Bars = bars, Style = style,
-        Progression = progression == 0 ? null : ChordProgressionLibrary.All[progression - 1].Name,
+        IsArrangement = mode == 2,
+        Progression = progression == 0 ? null : ChordProgressionLibrary.All[progression - 1].Id,
+        Seed = options.Seed,
         Sections = mode == 2 ? BasslineGenerator.Generation.BasslineGenerator.FullArrangement(bars) : null
     };
     var result = new BasslineGenerator.Generation.BasslineGenerator().Generate(settings);
@@ -47,7 +52,7 @@ try
     new MidiExporter().SaveNew(result, outputPath);
     Console.WriteLine($"Style: {string.Join(" → ", result.Sections.Select(s => s.Style))}");
     Console.WriteLine($"Key: {root}\nScale: {settings.ScaleType}\nBars: {result.Sections.Sum(s => s.Bars)}\nBPM: {bpm}");
-    Console.WriteLine($"Progression: {result.Progression}\nGenerated Motifs: {result.Motif.Name}\nOutput File: {outputPath}");
+    Console.WriteLine($"Progression: {result.Progression}\nSeed: {result.Configuration.Seed}\nGenerated Motifs: {result.Motif.Name}\nOutput File: {outputPath}");
 }
 catch (EndOfStreamException)
 {

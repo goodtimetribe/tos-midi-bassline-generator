@@ -15,6 +15,9 @@
         const fields = {};
         const message = document.createElement("div");
         message.setAttribute("role", "status");
+        const progressionDetails = schema.properties.progression["x-progression-details"] || [];
+        const progressionInfo = document.createElement("div");
+        progressionInfo.setAttribute("aria-live", "polite");
         let invalidSections = false;
 
         for (const [name, property] of Object.entries(schema.properties)) {
@@ -58,9 +61,19 @@
             }
             fields[name] = field;
             label.appendChild(field);
+            if (name === "progression") label.appendChild(progressionInfo);
             form.appendChild(label);
         }
         form.appendChild(message);
+
+        function updateProgressionInfo(value) {
+            const progression = progressionDetails.find(item =>
+                item.name === value || item.id === value || item.legacy === value || item.sequence === value);
+            progressionInfo.textContent = progression
+                ? `${progression.sequence} — ${progression.description} Use: ${progression.suggestedUse} Mood: ${progression.mood}.`
+                : value ? "Unknown progression; use an exact name, ID, or supported legacy sequence."
+                : "Random progression selected for the scale.";
+        }
 
         function parseBody() {
             const body = JSON.parse(textarea.value);
@@ -77,11 +90,19 @@
                     field.value = name === "sections" && body[name] != null
                         ? JSON.stringify(body[name], null, 2) : body[name] ?? "";
                     if (field.tagName === "SELECT" && field.selectedIndex === -1 && typeof body[name] === "string") {
-                        const match = Array.from(field.options).find(option =>
-                            option.value.toLowerCase() === body[name].trim().toLowerCase());
-                        if (match) field.value = match.value;
+                        if (name === "progression") {
+                            const match = progressionDetails.find(item =>
+                                item.id === body[name] || item.legacy === body[name] || item.sequence === body[name]);
+                            if (match) field.value = match.name;
+                        }
+                        if (name !== "progression") {
+                            const match = Array.from(field.options).find(option =>
+                                option.value.toLowerCase() === body[name].trim().toLowerCase());
+                            if (match) field.value = match.value;
+                        }
                     }
                 }
+                updateProgressionInfo(body.progression);
                 if (!invalidSections) message.textContent = "";
             } catch {
                 message.textContent = "Enter a JSON object in the request body before using the form.";
@@ -96,6 +117,7 @@
                 return;
             }
             const field = event.target;
+            if (field.dataset.property === "progression") updateProgressionInfo(field.value);
             if (field.dataset.property === "sections" && event.type === "input") {
                 try {
                     if (field.value.trim() && !Array.isArray(JSON.parse(field.value))) throw new Error();

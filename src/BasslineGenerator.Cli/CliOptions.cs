@@ -12,6 +12,7 @@ internal sealed class CliOptions
     public int? Bpm { get; private set; }
     public int? Bars { get; private set; }
     public int? Progression { get; private set; }
+    public int? Seed { get; private set; }
     public bool? Confirm { get; private set; }
 
     public static CliOptions Parse(string[] args)
@@ -38,7 +39,7 @@ internal sealed class CliOptions
                 result.Confirm = true;
                 continue;
             }
-            if (name is not ("--mode" or "--style" or "--key" or "--scale" or "--bpm" or "--bars" or "--progression" or "--confirm"))
+            if (name is not ("--mode" or "--style" or "--key" or "--scale" or "--bpm" or "--bars" or "--progression" or "--seed" or "--confirm"))
                 throw new ArgumentException($"Unknown option: {parts[0]}.");
             var value = parts.Length == 2 ? parts[1] : ++i < args.Length ? args[i] : "";
             if (string.IsNullOrWhiteSpace(value) || value.StartsWith("--", StringComparison.Ordinal))
@@ -57,12 +58,17 @@ internal sealed class CliOptions
                     break;
                 case "--bpm": result.Bpm = Number(name, value, 30, 300); break;
                 case "--bars": result.Bars = Number(name, value, 1, 512); break;
+                case "--seed":
+                    if (!int.TryParse(value, out var seed)) throw new ArgumentException("--seed must be a signed 32-bit integer.");
+                    result.Seed = seed;
+                    break;
                 case "--progression":
                     if (value.Equals("random", StringComparison.OrdinalIgnoreCase)) result.Progression = 0;
                     else if (int.TryParse(value, out _)) result.Progression = Number(name, value, 0, ChordProgressionLibrary.All.Count);
                     else
                     {
-                        var index = ChordProgressionLibrary.All.ToList().FindIndex(p => p.Name.Equals(value, StringComparison.Ordinal));
+                        var match = ChordProgressionLibrary.Find(value);
+                        var index = match is null ? -1 : ChordProgressionLibrary.All.ToList().IndexOf(match);
                         if (index < 0) throw new ArgumentException($"Unknown progression: {value}.");
                         result.Progression = index + 1;
                     }
@@ -108,6 +114,7 @@ internal sealed class CliOptions
               --bpm <number>                    30–300
               --bars <number>                   1–512; per arrangement section
               --progression <random|number|name>
+              --seed <integer>                 signed 32-bit seed for reproducible output
               --confirm <yes|no>                answer the generation prompt
               --yes                             shorthand for --confirm yes
               -h, --help                        show this help
@@ -118,6 +125,9 @@ internal sealed class CliOptions
             Console.WriteLine($"  {i + 1}. {ScaleLibrary.All[i].Name} — {ScaleLibrary.All[i].Mood}");
         Console.WriteLine("Progressions (names are case-sensitive):\n  0. Random");
         for (var i = 0; i < ChordProgressionLibrary.All.Count; i++)
-            Console.WriteLine($"  {i + 1}. {ChordProgressionLibrary.All[i].Name}");
+        {
+            var p = ChordProgressionLibrary.All[i];
+            Console.WriteLine($"  {i + 1}. {p.DisplayName} ({string.Join(" - ", p.ChordSequence)}) — {p.Description} {p.SuggestedUse}");
+        }
     }
 }

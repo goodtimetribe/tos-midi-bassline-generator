@@ -13,7 +13,7 @@ public class CliArgumentTests : IDisposable
     public async Task NamedOptionsGenerateWithoutPrompts()
     {
         var result = await Run("", "--mode", "single", "--style", "acid", "--key", "C#",
-            "--scale", "minor", "--bpm", "140", "--bars", "2", "--progression", "i - VI - III - VII", "--yes");
+            "--scale", "minor", "--bpm", "140", "--bars", "2", "--progression", "i - VI - III - VII", "--seed", "42", "--yes");
 
         Assert.Equal(0, result.ExitCode);
         Assert.DoesNotContain("Generate MIDI?", result.Output);
@@ -27,9 +27,29 @@ public class CliArgumentTests : IDisposable
         Assert.Contains("Style: Acid", result.Output);
         Assert.Contains("Key: C#\nScale: Minor\nBars: 2\nBPM: 140", result.Output);
         Assert.Contains("Progression: i - VI - III - VII", result.Output);
-        var file = Assert.Single(Directory.GetFiles(directory, "*.mid"));
+        Assert.Contains("Seed: 42", result.Output);
+        var files = Directory.GetFiles(directory, "*.mid");
+        var file = Assert.Single(files);
         Assert.Contains(file, result.Output);
         Assert.Equal(MidiFileFormat.MultiTrack, MidiFile.Read(file).OriginalFormat);
+        var replay = await Run("", "--mode", "single", "--style", "acid", "--key", "C#",
+            "--scale", "minor", "--bpm", "140", "--bars", "2", "--progression", "i - VI - III - VII", "--seed", "42", "--yes");
+        Assert.Equal(0, replay.ExitCode);
+        var replayFiles = Directory.GetFiles(directory, "*.mid");
+        Assert.Equal(2, replayFiles.Length);
+        Assert.Equal(await File.ReadAllBytesAsync(file), await File.ReadAllBytesAsync(replayFiles.Single(path => path != file)));
+    }
+
+    [Theory]
+    [InlineData("Machine World")]
+    [InlineData("machine-world")]
+    public async Task CuratedProgressionNamesAndIdsWorkInCli(string progression)
+    {
+        var result = await Run("", "--mode", "single", "--style", "acid", "--key", "A",
+            "--scale", "minor", "--bpm", "140", "--bars", "1", "--progression", progression, "--yes");
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("Progression: i - III - iv - VII", result.Output);
+        Assert.Single(Directory.GetFiles(directory, "*.mid"));
     }
 
     [Theory]
@@ -86,7 +106,7 @@ public class CliArgumentTests : IDisposable
     {
         var result = await Run("", option);
         Assert.Equal(0, result.ExitCode);
-        foreach (var name in new[] { "--mode", "--style", "--key", "--scale", "--bpm", "--bars", "--progression", "--confirm", "--yes", "--help" })
+        foreach (var name in new[] { "--mode", "--style", "--key", "--scale", "--bpm", "--bars", "--progression", "--seed", "--confirm", "--yes", "--help" })
             Assert.Contains(name, result.Output);
         Assert.Contains("i - VI - III - VII", result.Output);
         Assert.Empty(Directory.GetFiles(directory, "*.mid"));
@@ -99,6 +119,7 @@ public class CliArgumentTests : IDisposable
     [InlineData("--key", "H")]
     [InlineData("--scale", "unknown")]
     [InlineData("--progression", "missing")]
+    [InlineData("--seed", "2147483648")]
     [InlineData("--confirm", "maybe")]
     [InlineData("--unknown", "value")]
     [InlineData("--bars", "")]

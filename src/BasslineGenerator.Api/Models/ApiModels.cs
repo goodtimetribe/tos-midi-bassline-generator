@@ -40,8 +40,8 @@ public sealed class GenerateRequest : IValidatableObject
     [GenerationMode]
     public string? Mode { get; set; }
 
-    /// <summary>Case-sensitive progression name. Omit or set to null for a random progression chosen for the scale.</summary>
-    /// <example>i - VI - III - VII</example>
+    /// <summary>Case-sensitive progression name, ID, or legacy chord sequence. Omit or set to null for a random progression chosen for the scale.</summary>
+    /// <example>Synthwave</example>
     [Progression]
     public string? Progression { get; set; }
 
@@ -171,8 +171,16 @@ public sealed class GenerationModeAttribute : ValidationAttribute
 public sealed class ProgressionAttribute : ValidationAttribute
 {
     public override bool IsValid(object? value) => value is null ||
-        value is string name && ChordProgressionLibrary.All.Any(p => p.Name.Equals(name, StringComparison.Ordinal));
+        value is string name && ChordProgressionLibrary.Find(name) is not null;
 }
+
+/// <summary>Musical metadata for a selectable progression.</summary>
+public sealed record ProgressionResponse(string Id, string Name, string Description,
+    IReadOnlyList<string> ChordSequence, string Mood, string SuggestedUse);
+
+/// <summary>Generated bassline metadata and a hash for verifying replay; request with Accept: application/json.</summary>
+public sealed record GenerationResponse(GenerateRequest Request, GenerationConfiguration Configuration,
+    GenerationStatistics Statistics, string Motif, string Progression, int BarCount, string MidiSha256);
 
 /// <summary>A safe, human-readable error response.</summary>
 /// <param name="Error">Description of the error without the supplied input.</param>

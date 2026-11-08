@@ -3,6 +3,7 @@ using BasslineGenerator.Interfaces;
 using BasslineGenerator.Models;
 using BasslineGenerator.MusicTheory;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Cryptography;
 
 namespace BasslineGenerator.Api.Controllers;
 
@@ -34,8 +35,19 @@ public sealed class BasslineController(
     [ProducesResponseType<ErrorResponse>(StatusCodes.Status500InternalServerError)]
     public ActionResult<string[]> Presets() => Ok(presets.Select(p => p.World.ToString()).ToArray());
 
+    /// <summary>Returns the curated chord progression library.</summary>
+    /// <response code="200">Progression names, chord sequences, moods and suggested uses.</response>
+    /// <response code="429">The rate limit was exceeded.</response>
+    /// <response code="500">An unexpected server error occurred.</response>
+    [HttpGet("progressions")]
+    [ProducesResponseType<ProgressionResponse[]>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status429TooManyRequests)]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status500InternalServerError)]
+    public ActionResult<ProgressionResponse[]> Progressions() => Ok(ChordProgressionLibrary.All.Select(p =>
+        new ProgressionResponse(p.Id, p.DisplayName, p.Description, p.ChordSequence, p.Mood, p.SuggestedUse)).ToArray());
+
     /// <summary>Generates a MIDI bassline.</summary>
-    /// <remarks>Generates a MIDI file entirely in memory and returns it directly to the caller. No generated musical content is stored.</remarks>
+    /// <remarks>Generates a MIDI file entirely in memory and returns it directly to the caller. Send Accept: application/json for the effective configuration and statistics; use its seed to reproduce the MIDI. No generated musical content is stored.</remarks>
     /// <param name="request">Musical settings for the bassline.</param>
     /// <response code="200">The generated MIDI file.</response>
     /// <response code="400">The request is invalid.</response>
@@ -44,6 +56,7 @@ public sealed class BasslineController(
     [HttpPost("generate")]
     [Consumes("application/json")]
     [ProducesResponseType(typeof(byte[]), StatusCodes.Status200OK, "audio/midi")]
+    [ProducesResponseType<GenerationResponse>(StatusCodes.Status200OK, "application/json")]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest, "application/json")]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError, "application/json")]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status429TooManyRequests, "application/json")]
@@ -72,6 +85,7 @@ public sealed class BasslineController(
             Repetition = request.Repetition,
             Progression = request.Progression,
             Seed = request.Seed,
+            IsArrangement = request.Mode == GenerationModes.Arrangement,
             Channel = request.Channel ?? 0,
             Velocity = request.Velocity ?? 100,
             VelocityVariation = request.VelocityVariation ?? 0,
@@ -88,7 +102,17 @@ public sealed class BasslineController(
         var result = generator.Generate(settings);
         using var stream = new MemoryStream();
         exporter.Write(result, stream);
+        var midi = stream.ToArray();
+        Response.Headers["X-Generation-Seed"] = result.Configuration.Seed.ToString(System.Globalization.CultureInfo.InvariantCulture);
         logger.LogInformation("Generation succeeded.");
-        return File(stream.ToArray(), "audio/midi", "bassline.mid");
+        if (Request.GetTypedHeaders().Accept?.Any(mediaType =>
+                mediaType.Quality.GetValueOrDefault(1) > 0
+                && string.Equals(mediaType.MediaType.Value, "application/json", StringComparison.OrdinalIgnoreCase)) == true)
+        {
+            request.Seed ??= result.Configuration.Seed;
+            return Ok(new GenerationResponse(request, result.Configuration, result.Statistics,
+                result.Motif.Name, result.Progression, result.BarCount, Convert.ToHexString(SHA256.HashData(midi))));
+        }
+        return File(midi, "audio/midi", "bassline.mid");
     }
 }
