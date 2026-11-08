@@ -103,11 +103,11 @@ The root, scale, style, BPM and bars fields are required. `rootNote` supports
 natural notes and the same sharps and flats as the CLI (for example `C#` and
 `Bb`); `scaleType` is one of the scales listed below, with `Natural Minor` an
 alias for `Minor`; and `style` is one of the returned presets. These names are
-case-insensitive. `bpm` is an integer from 4 to 1000, and `bars` is an integer
-from 1 to 4096, inclusive.
+case-insensitive. `bpm` is an integer from 30 to 300, and `bars` is an integer
+from 1 to 512, inclusive.
 Optional `mode` is case-sensitive: `single` (the default) generates one section,
 and `arrangement` generates the six sections described below. In arrangement
-mode, `bars` is per section (up to 682 per section); `style` is still required
+mode, `bars` is per section; `style` is still required
 but the arrangement uses its own section styles. Optional `progression` selects
 one of the case-sensitive names listed in Swagger; omit it or use `null` for a
 random progression chosen for the scale. Omit `mode` or use `null` for single
@@ -115,9 +115,10 @@ mode.
 
 To specify a custom arrangement instead, provide `sections`, for example
 `[{"name":"Intro","style":"Dreamy","bars":4},{"name":"Drop","style":"Acid","bars":8}]`.
-The list must be nonempty and total at most 4096 bars; it overrides single mode
-and cannot be combined with `mode: "arrangement"`. The top-level `style` and
-`bars` are still required but are not used for custom sections.
+The list must be nonempty, each section must be 1–512 bars, and total at most
+4096 bars; it overrides single mode and cannot be combined with
+`mode: "arrangement"`. The top-level `style` and `bars` are still required but
+are not used for custom sections.
 
 Specify `seed` as a signed 32-bit integer to reproduce the same MIDI from the
 same settings and engine version, including when progression is random. Save
@@ -170,7 +171,7 @@ produce a recurring theme that gradually evolves. Style also retains its
 characteristic density and note gate.
 
 Invalid input returns HTTP 400, for example
-`{"error":"BPM must be an integer between 4 and 1000."}`. Unexpected failures
+`{"error":"BPM must be an integer between 30 and 300."}`. Unexpected failures
 return HTTP 500 and `{"error":"An unexpected error occurred."}`. A rate-limited
 request returns HTTP 429 and `{"error":"Too many requests."}`. The future
 analysis, variation, and arrangement controllers are extension points, not
@@ -392,8 +393,9 @@ the section generator, motif generator, MIDI file factory, and presets.
 
 Omit `Sections` to use `Style` and `Bars` for a single section, or use
 `BasslineGenerator.Generation.BasslineGenerator.FullArrangement(barsPerSection)`.
-Sections are consecutive and total at most 4096 bars. BPM is 4–1000; velocity is
-1–127; velocity variation is 0–127; timing variation is 0–30 ticks; swing is
+Sections are consecutive, each section is at most 512 bars, and the total is at
+most 4096 bars. BPM is 30–300; velocity is 1–127; velocity variation is 0–127;
+timing variation is 0–30 ticks; swing is
 0–0.5 of an eighth note. The five optional musical dimensions are 0–100;
 when omitted, each section uses its style's defaults. Groove can accent offbeats
 above the base velocity, independently of the optional downbeat accent.

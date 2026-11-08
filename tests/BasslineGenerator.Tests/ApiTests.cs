@@ -41,8 +41,8 @@ public class ApiTests
     }
 
     [Theory]
-    [InlineData(4, 1)]
-    [InlineData(1000, 256)]
+    [InlineData(30, 1)]
+    [InlineData(300, 256)]
     public async Task GenerateReturnsValidMidiInMemory(int bpm, int bars)
     {
         await using var factory = new WebApplicationFactory<Program>();
@@ -69,8 +69,8 @@ public class ApiTests
     }
 
     [Theory]
-    [InlineData("single", 4096, 4096)]
-    [InlineData("arrangement", 682, 4092)]
+    [InlineData("single", 512, 512)]
+    [InlineData("arrangement", 512, 3072)]
     public async Task MaximumCoreLengthsGenerateMidi(string mode, int bars, int expectedBars)
     {
         await using var factory = new WebApplicationFactory<Program>();
@@ -321,7 +321,7 @@ public class ApiTests
     [InlineData("[null]")]
     [InlineData("[{\"name\":\"Intro\",\"style\":\"private input\",\"bars\":1}]")]
     [InlineData("[{\"name\":\"Intro\",\"style\":\"Acid\",\"bars\":0}]")]
-    [InlineData("[{\"name\":\"Intro\",\"style\":\"Acid\",\"bars\":4096},{\"name\":\"Outro\",\"style\":\"Pop\",\"bars\":1}]")]
+    [InlineData("[{\"name\":\"Intro\",\"style\":\"Acid\",\"bars\":513}]")]
     [InlineData("[{\"style\":\"Acid\",\"bars\":1}]")]
     public async Task InvalidCustomSectionsReturnSafeBadRequest(string sections)
     {
@@ -333,15 +333,29 @@ public class ApiTests
         Assert.DoesNotContain("private input", await response.Content.ReadAsStringAsync());
     }
 
+    [Fact]
+    public async Task CustomSectionsCannotExceedTotalBarLimit()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var sections = Enumerable.Range(0, 9)
+            .Select(i => new { name = $"Section {i}", style = "Acid", bars = 512 });
+        using var response = await client.PostAsJsonAsync("/api/generate", new
+        {
+            rootNote = "A", scaleType = "Minor", style = "Acid", bpm = 140, bars = 1, sections
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     [Theory]
     [InlineData("{\"rootNote\":\"H\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":16}", "Root note")]
     [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"unknown\",\"style\":\"Acid\",\"bpm\":140,\"bars\":16}", "Scale type")]
     [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Unknown\",\"bpm\":140,\"bars\":16}", "Style")]
-    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":3,\"bars\":16}", "BPM")]
-    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":1001,\"bars\":16}", "BPM")]
+    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":29,\"bars\":16}", "BPM")]
+    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":301,\"bars\":16}", "BPM")]
     [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":0}", "Bars")]
-    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":4097}", "Bars")]
-    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":683,\"mode\":\"arrangement\"}", "Bars")]
+    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":513}", "Bars")]
+    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":513,\"mode\":\"arrangement\"}", "Bars")]
     [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":1,\"mode\":\"arrangement\",\"sections\":[{\"name\":\"Intro\",\"style\":\"Acid\",\"bars\":1}]}", "Sections")]
     [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140}", "Bars")]
     [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":1,\"mode\":\"Arrangement\"}", "Mode")]
@@ -563,10 +577,14 @@ public class ApiTests
             Assert.False(string.IsNullOrWhiteSpace(properties.GetProperty(name).GetProperty("description").GetString()));
             Assert.True(properties.GetProperty(name).TryGetProperty("example", out _));
         }
-        Assert.Equal(4, properties.GetProperty("bpm").GetProperty("minimum").GetInt32());
-        Assert.Equal(1000, properties.GetProperty("bpm").GetProperty("maximum").GetInt32());
+        Assert.Equal(30, properties.GetProperty("bpm").GetProperty("minimum").GetInt32());
+        Assert.Equal(300, properties.GetProperty("bpm").GetProperty("maximum").GetInt32());
         Assert.Equal(1, properties.GetProperty("bars").GetProperty("minimum").GetInt32());
-        Assert.Equal(4096, properties.GetProperty("bars").GetProperty("maximum").GetInt32());
+        Assert.Equal(512, properties.GetProperty("bars").GetProperty("maximum").GetInt32());
+        var sectionBars = root.GetProperty("components").GetProperty("schemas").GetProperty("SectionRequest")
+            .GetProperty("properties").GetProperty("bars");
+        Assert.Equal(1, sectionBars.GetProperty("minimum").GetInt32());
+        Assert.Equal(512, sectionBars.GetProperty("maximum").GetInt32());
         foreach (var name in new[] { "seed", "channel", "velocity", "velocityVariation", "timingVariation", "swing", "accentDownbeats", "sections" })
             Assert.False(string.IsNullOrWhiteSpace(properties.GetProperty(name).GetProperty("description").GetString()));
         foreach (var name in new[] { "movement", "groove", "mutation", "tension", "repetition" })

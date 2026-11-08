@@ -16,7 +16,7 @@ public sealed class GenerateRequestSchemaFilter(IEnumerable<IPreset> presets) : 
             SetSuggestions(schema.Properties["style"], presets.Select(p => p.World.ToString()));
             schema.Required = new HashSet<string> { "name", "style", "bars" };
             schema.Properties["bars"].Minimum = 1;
-            schema.Properties["bars"].Maximum = 4096;
+            schema.Properties["bars"].Maximum = 512;
             return;
         }
         if (context.Type != typeof(GenerateRequest)) return;

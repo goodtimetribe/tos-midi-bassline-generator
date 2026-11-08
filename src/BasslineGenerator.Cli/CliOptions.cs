@@ -55,8 +55,8 @@ internal sealed class CliOptions
                     catch (ArgumentException) { throw new ArgumentException($"Invalid key: {value}."); }
                     result.Key = value;
                     break;
-                case "--bpm": result.Bpm = Number(name, value, 4, 1000); break;
-                case "--bars": result.Bars = Number(name, value, 1, 4096); break;
+                case "--bpm": result.Bpm = Number(name, value, 30, 300); break;
+                case "--bars": result.Bars = Number(name, value, 1, 512); break;
                 case "--progression":
                     if (value.Equals("random", StringComparison.OrdinalIgnoreCase)) result.Progression = 0;
                     else if (int.TryParse(value, out _)) result.Progression = Number(name, value, 0, ChordProgressionLibrary.All.Count);
@@ -105,8 +105,8 @@ internal sealed class CliOptions
               --style <dreamy|pop|acid|rave>    1–4; single section only
               --key <note>                      e.g. A, C#, Bb
               --scale <name|number>             see scales below; quote names with spaces
-              --bpm <number>                    4–1000
-              --bars <number>                   1–4096; 1–682 per arrangement section
+              --bpm <number>                    30–300
+              --bars <number>                   1–512; per arrangement section
               --progression <random|number|name>
               --confirm <yes|no>                answer the generation prompt
               --yes                             shorthand for --confirm yes

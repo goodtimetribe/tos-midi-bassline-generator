@@ -22,8 +22,8 @@ public class CliArgumentTests : IDisposable
         Assert.DoesNotContain("Style: 1.", result.Output);
         Assert.DoesNotContain("Key (e.g.", result.Output);
         Assert.DoesNotContain("Scale: 1.", result.Output);
-        Assert.DoesNotContain("BPM (4–1000):", result.Output);
-        Assert.DoesNotContain("Bars (1–4096):", result.Output);
+        Assert.DoesNotContain("BPM (30–300):", result.Output);
+        Assert.DoesNotContain("Bars (1–512):", result.Output);
         Assert.Contains("Style: Acid", result.Output);
         Assert.Contains("Key: C#\nScale: Minor\nBars: 2\nBPM: 140", result.Output);
         Assert.Contains("Progression: i - VI - III - VII", result.Output);
@@ -53,7 +53,7 @@ public class CliArgumentTests : IDisposable
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("Key (e.g. A, C#, Bb):", result.Output);
-        Assert.Contains("BPM (4–1000):", result.Output);
+        Assert.Contains("BPM (30–300):", result.Output);
         Assert.Contains("Generate MIDI? (Y/N):", result.Output);
         Assert.DoesNotContain("Mode: 1.", result.Output);
         Assert.DoesNotContain("Style: 1.", result.Output);
@@ -93,7 +93,9 @@ public class CliArgumentTests : IDisposable
     }
 
     [Theory]
-    [InlineData("--bpm", "3")]
+    [InlineData("--bpm", "29")]
+    [InlineData("--bpm", "301")]
+    [InlineData("--bars", "513")]
     [InlineData("--key", "H")]
     [InlineData("--scale", "unknown")]
     [InlineData("--progression", "missing")]
@@ -114,7 +116,7 @@ public class CliArgumentTests : IDisposable
         foreach (var args in new[]
         {
             new[] { "--mode", "arrangement", "--style", "acid" },
-            new[] { "--mode", "arrangement", "--bars", "683" },
+            new[] { "--mode", "arrangement", "--bars", "513" },
             new[] { "--yes", "--confirm", "no" },
             new[] { "--yes=no" },
             new[] { "--key" }
