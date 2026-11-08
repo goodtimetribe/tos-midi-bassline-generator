@@ -33,6 +33,18 @@ public class CliArgumentTests : IDisposable
     }
 
     [Theory]
+    [InlineData("Machine World")]
+    [InlineData("machine-world")]
+    public async Task CuratedProgressionNamesAndIdsWorkInCli(string progression)
+    {
+        var result = await Run("", "--mode", "single", "--style", "acid", "--key", "A",
+            "--scale", "minor", "--bpm", "140", "--bars", "1", "--progression", progression, "--yes");
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("Progression: i - III - iv - VII", result.Output);
+        Assert.Single(Directory.GetFiles(directory, "*.mid"));
+    }
+
+    [Theory]
     [InlineData("Phrygian")]
     [InlineData("Major Pentatonic")]
     [InlineData("Blues")]

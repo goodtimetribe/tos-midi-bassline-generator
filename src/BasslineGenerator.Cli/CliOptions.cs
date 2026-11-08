@@ -62,7 +62,8 @@ internal sealed class CliOptions
                     else if (int.TryParse(value, out _)) result.Progression = Number(name, value, 0, ChordProgressionLibrary.All.Count);
                     else
                     {
-                        var index = ChordProgressionLibrary.All.ToList().FindIndex(p => p.Name.Equals(value, StringComparison.Ordinal));
+                        var match = ChordProgressionLibrary.Find(value);
+                        var index = match is null ? -1 : ChordProgressionLibrary.All.ToList().IndexOf(match);
                         if (index < 0) throw new ArgumentException($"Unknown progression: {value}.");
                         result.Progression = index + 1;
                     }
@@ -118,6 +119,9 @@ internal sealed class CliOptions
             Console.WriteLine($"  {i + 1}. {ScaleLibrary.All[i].Name} — {ScaleLibrary.All[i].Mood}");
         Console.WriteLine("Progressions (names are case-sensitive):\n  0. Random");
         for (var i = 0; i < ChordProgressionLibrary.All.Count; i++)
-            Console.WriteLine($"  {i + 1}. {ChordProgressionLibrary.All[i].Name}");
+        {
+            var p = ChordProgressionLibrary.All[i];
+            Console.WriteLine($"  {i + 1}. {p.DisplayName} ({string.Join(" - ", p.ChordSequence)}) — {p.Description} {p.SuggestedUse}");
+        }
     }
 }

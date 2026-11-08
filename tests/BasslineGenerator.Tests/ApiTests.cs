@@ -40,6 +40,45 @@ public class ApiTests
             await client.GetFromJsonAsync<string[]>("/api/presets"));
     }
 
+    [Fact]
+    public async Task ProgressionEndpointSerializesTheEntireLibrary()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        using var response = await client.GetAsync("/api/progressions");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Headers.CacheControl?.NoStore);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var items = document.RootElement.EnumerateArray().ToArray();
+        Assert.Equal(ChordProgressionLibrary.All.Count, items.Length);
+        for (var i = 0; i < items.Length; i++)
+        {
+            var p = ChordProgressionLibrary.All[i];
+            var item = items[i];
+            Assert.Equal(p.Id, item.GetProperty("id").GetString());
+            Assert.Equal(p.DisplayName, item.GetProperty("name").GetString());
+            Assert.Equal(p.Description, item.GetProperty("description").GetString());
+            Assert.Equal(p.ChordSequence, item.GetProperty("chordSequence").EnumerateArray().Select(c => c.GetString()));
+            Assert.Equal(p.Mood, item.GetProperty("mood").GetString());
+            Assert.Equal(p.SuggestedUse, item.GetProperty("suggestedUse").GetString());
+        }
+    }
+
+    [Theory]
+    [InlineData("Synthwave")]
+    [InlineData("machine-world")]
+    [InlineData("i - bVII - bVI - bVII")]
+    public async Task ProgressionNamesIdsAndLegacyValuesAreAccepted(string progression)
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        using var response = await client.PostAsJsonAsync("/api/generate", new
+        {
+            rootNote = "A", scaleType = "Minor", style = "Acid", bpm = 140, bars = 1, progression
+        });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     [Theory]
     [InlineData(30, 1)]
     [InlineData(300, 256)]
@@ -533,12 +572,13 @@ public class ApiTests
         var paths = root.GetProperty("paths");
         var health = paths.GetProperty("/api/health").GetProperty("get");
         var presets = paths.GetProperty("/api/presets").GetProperty("get");
+        var progressions = paths.GetProperty("/api/progressions").GetProperty("get");
         var generate = paths.GetProperty("/api/generate").GetProperty("post");
         Assert.Equal("System", health.GetProperty("tags")[0].GetString());
         Assert.Equal("Generation", presets.GetProperty("tags")[0].GetString());
         Assert.Equal("Generation", generate.GetProperty("tags")[0].GetString());
         Assert.Contains("in memory", generate.GetProperty("description").GetString());
-        foreach (var operation in new[] { health, presets, generate })
+        foreach (var operation in new[] { health, presets, progressions, generate })
         {
             Assert.False(string.IsNullOrWhiteSpace(operation.GetProperty("summary").GetString()));
             foreach (var status in new[] { "200", "429", "500" })
@@ -571,7 +611,20 @@ public class ApiTests
         Assert.Contains("0, 3, 5, 6, 7, 10", scaleDescription);
         CheckSuggestions("style", ["Dreamy", "Pop", "Acid", "Rave"]);
         CheckChoices("mode", ["single", "arrangement"]);
-        CheckChoices("progression", ChordProgressionLibrary.All.Select(p => p.Name).ToArray());
+        CheckSuggestions("progression", ChordProgressionLibrary.All.Select(p => p.DisplayName).ToArray());
+        var progressionSchema = properties.GetProperty("progression");
+        Assert.False(progressionSchema.TryGetProperty("enum", out _));
+        var details = progressionSchema.GetProperty("x-progression-details").EnumerateArray().ToArray();
+        Assert.Equal(ChordProgressionLibrary.All.Count, details.Length);
+        foreach (var p in ChordProgressionLibrary.All)
+        {
+            var item = Assert.Single(details, item => item.GetProperty("id").GetString() == p.Id);
+            Assert.Equal(p.DisplayName, item.GetProperty("name").GetString());
+            Assert.Equal(string.Join(" - ", p.ChordSequence), item.GetProperty("sequence").GetString());
+            Assert.Equal(p.Description, item.GetProperty("description").GetString());
+            Assert.Equal(p.SuggestedUse, item.GetProperty("suggestedUse").GetString());
+            Assert.Contains(p.DisplayName, progressionSchema.GetProperty("description").GetString());
+        }
         foreach (var name in new[] { "mode", "progression" })
         {
             Assert.False(string.IsNullOrWhiteSpace(properties.GetProperty(name).GetProperty("description").GetString()));

@@ -38,6 +38,22 @@ public class WorldSequencingTests
             result.Notes.Count(n => n.Start < 2L * MusicConstants.TicksPerBar));
     }
 
+    [Theory]
+    [InlineData("Synthwave", new[] { 45, 41, 36, 43, 45, 41 })]
+    [InlineData("Machine World", new[] { 45, 36, 38, 43, 45, 36 })]
+    [InlineData("Techno Minimal", new[] { 45, 45, 43, 45, 45, 45 })]
+    public void CuratedProgressionsDriveDownbeatsAndLoopAcrossSections(string progression, int[] expectedRoots)
+    {
+        var result = CreateGenerator().Generate(new GeneratorSettings
+        {
+            Seed = 14, RootNote = "A", ScaleType = "Minor", Progression = progression,
+            Movement = 0, Tension = 0, Mutation = 0, Repetition = 100,
+            Sections = [new("Intro", SongWorld.Dreamy, 3), new("Drop", SongWorld.Acid, 3)]
+        });
+        for (var bar = 0; bar < expectedRoots.Length; bar++)
+            Assert.Equal(expectedRoots[bar], Assert.Single(result.Notes, n => n.Start == bar * MusicConstants.TicksPerBar).Pitch);
+    }
+
     [Fact]
     public void ValidatesSettings()
     {

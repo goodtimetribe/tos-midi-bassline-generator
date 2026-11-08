@@ -34,6 +34,17 @@ public sealed class BasslineController(
     [ProducesResponseType<ErrorResponse>(StatusCodes.Status500InternalServerError)]
     public ActionResult<string[]> Presets() => Ok(presets.Select(p => p.World.ToString()).ToArray());
 
+    /// <summary>Returns the curated chord progression library.</summary>
+    /// <response code="200">Progression names, chord sequences, moods and suggested uses.</response>
+    /// <response code="429">The rate limit was exceeded.</response>
+    /// <response code="500">An unexpected server error occurred.</response>
+    [HttpGet("progressions")]
+    [ProducesResponseType<ProgressionResponse[]>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status429TooManyRequests)]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status500InternalServerError)]
+    public ActionResult<ProgressionResponse[]> Progressions() => Ok(ChordProgressionLibrary.All.Select(p =>
+        new ProgressionResponse(p.Id, p.DisplayName, p.Description, p.ChordSequence, p.Mood, p.SuggestedUse)).ToArray());
+
     /// <summary>Generates a MIDI bassline.</summary>
     /// <remarks>Generates a MIDI file entirely in memory and returns it directly to the caller. No generated musical content is stored.</remarks>
     /// <param name="request">Musical settings for the bassline.</param>

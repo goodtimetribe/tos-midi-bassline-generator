@@ -47,12 +47,13 @@ names. Any omitted option is requested interactively; style is only used for a
 single section. For example, to generate without prompts:
 
 ```sh
-dotnet run --project src/BasslineGenerator.Cli -- --mode single --style acid --key A --scale minor --bpm 140 --bars 16 --progression "i - VI - III - VII" --yes
+dotnet run --project src/BasslineGenerator.Cli -- --mode single --style acid --key A --scale minor --bpm 140 --bars 16 --progression "Synthwave" --yes
 ```
 
 Mode, style, and scale also accept the numbers shown in their prompts.
 Progression accepts its displayed number, `random`, or its exact, case-sensitive
-name. Use `--confirm yes` or `--confirm no` to answer the generation prompt
+display name, ID, or legacy chord sequence. The first six numeric choices retain
+their original meaning. Use `--confirm yes` or `--confirm no` to answer the generation prompt
 explicitly; `--yes` is shorthand for `--confirm yes`. Options may also be
 written as `--option=value`. Invalid options or values produce an error.
 
@@ -80,12 +81,28 @@ length, seed, MIDI and humanization settings. Enter custom sections as a JSON
 array in the sections field and leave the field to apply it. The form updates the JSON request editor, which remains available for
 manual editing. The examples selector offers Dreamy ambient, Pop, Acid, Rave,
 and custom-section starting points; selecting an example also updates the form.
+The progression dropdown shows friendly names and displays each selection's
+chord sequence, description, mood, and suggested use.
 
 | Method and path | Description |
 | --- | --- |
 | `GET /api/health` | Returns `{"status":"healthy","version":"1.0.0"}`. |
 | `GET /api/presets` | Returns `["Dreamy","Pop","Acid","Rave"]`. |
+| `GET /api/progressions` | Returns progression IDs, names, descriptions, chord sequences, moods and suggested uses. |
 | `POST /api/generate` | Returns a downloadable `bassline.mid` with content type `audio/midi`. |
+
+For example, one entry in the progression response is:
+
+```json
+{
+  "id": "synthwave",
+  "name": "Synthwave",
+  "description": "Retro and nostalgic.",
+  "chordSequence": ["i", "VI", "III", "VII"],
+  "mood": "Nostalgic",
+  "suggestedUse": "Synthwave and retro electronic music."
+}
+```
 
 ### Generate Sample Bassline
 
@@ -109,7 +126,9 @@ Optional `mode` is case-sensitive: `single` (the default) generates one section,
 and `arrangement` generates the six sections described below. In arrangement
 mode, `bars` is per section; `style` is still required
 but the arrangement uses its own section styles. Optional `progression` selects
-one of the case-sensitive names listed in Swagger; omit it or use `null` for a
+one of the case-sensitive display names or IDs listed in Swagger or the
+progressions endpoint. Existing Roman-numeral sequence values remain supported;
+omit the field or use `null` for a
 random progression chosen for the scale. Omit `mode` or use `null` for single
 mode.
 
@@ -340,12 +359,14 @@ and Outro (Dreamy); the CLI and API arrangement bar counts are **per section**.
 
 Scale degrees and pitch classes support all the scales listed above; Core also
 accepts `Natural Minor` as an alias for `Minor` and roots with sharps or flats
-such as `C#` and `Bb`. Progression names preserve Roman numeral case and
+such as `C#` and `Bb`. Progression chord symbols preserve Roman numeral case and
 describe their written major/minor chord qualities and roots relative to the
 tonic. Chord tones that do not belong to the selected scale are mapped to the
 nearest scale tone, so their sounding quality can differ from the written
 progression. Random selection chooses from the major-family or minor-family
-progressions according to the scale.
+progressions according to the scale. Presets with identical chord sequences,
+such as Synthwave and Trance Lift, differ in their intended use rather than
+their harmony. The progression cycles continuously throughout the song.
 
 ## Programmatic use
 
@@ -361,7 +382,7 @@ var generator = new BasslineGenerator.Generation.BasslineGenerator();
 var settings = new GeneratorSettings
 {
     RootNote = "A", ScaleType = "Minor", BPM = 140, Style = SongWorld.Acid,
-    Progression = "i - VI - III - VII", // null selects randomly
+    Progression = "Synthwave",         // null selects randomly
     Seed = 42,                         // optional reproducible output
     Velocity = 100, Channel = 0,       // MIDI channel is zero-based (0–15)
     VelocityVariation = 8, TimingVariation = 10, Swing = 0.15,
