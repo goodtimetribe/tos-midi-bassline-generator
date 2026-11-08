@@ -25,7 +25,9 @@ public static class ChordProgressionLibrary
                 ?? throw new ArgumentException("Unknown progression.", nameof(name));
         // The major and minor libraries retain their written chord qualities.
         var major = scaleType.Equals("Major", StringComparison.OrdinalIgnoreCase)
-            || scaleType.Equals("Mixolydian", StringComparison.OrdinalIgnoreCase);
+            || scaleType.Equals("Mixolydian", StringComparison.OrdinalIgnoreCase)
+            || scaleType.Equals("Lydian", StringComparison.OrdinalIgnoreCase)
+            || scaleType.Equals("Major Pentatonic", StringComparison.OrdinalIgnoreCase);
         var candidates = Progressions.Where(p => major ? p.Name.StartsWith("I") || p.Name.StartsWith("vi") : p.Name.StartsWith("i")).ToArray();
         return candidates[random.Next(candidates.Length)];
     }

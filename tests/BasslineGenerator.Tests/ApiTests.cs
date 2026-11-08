@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using BasslineGenerator.Api.Models;
 using BasslineGenerator.Interfaces;
 using BasslineGenerator.Models;
+using BasslineGenerator.MusicTheory;
 using Melanchall.DryWetMidi.Core;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Builder;
@@ -64,6 +65,13 @@ public class ApiTests
     [InlineData("Minor", "Pop", "B")]
     [InlineData("Dorian", "Acid", "C")]
     [InlineData("Mixolydian", "Rave", "D")]
+    [InlineData("Lydian", "Dreamy", "A")]
+    [InlineData("Phrygian", "Acid", "A")]
+    [InlineData("Harmonic Minor", "Rave", "A")]
+    [InlineData("Melodic Minor", "Acid", "A")]
+    [InlineData("Major Pentatonic", "Pop", "A")]
+    [InlineData("Minor Pentatonic", "Pop", "A")]
+    [InlineData("Blues", "Acid", "A")]
     [InlineData("Minor", "Acid", "E")]
     [InlineData("Minor", "Acid", "F")]
     [InlineData("Minor", "Acid", "G")]
@@ -74,6 +82,12 @@ public class ApiTests
         using var response = await client.PostAsJsonAsync("/api/generate", new { rootNote, scaleType, style, bpm = 140, bars = 1 });
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("audio/midi", response.Content.Headers.ContentType?.MediaType);
+        using var stream = new MemoryStream(await response.Content.ReadAsByteArrayAsync());
+        var midi = MidiFile.Read(stream);
+        var notes = midi.GetTrackChunks().SelectMany(t => t.Events).OfType<NoteOnEvent>().ToArray();
+        Assert.NotEmpty(notes);
+        var allowed = ScaleLibrary.GetScale(rootNote, scaleType);
+        Assert.All(notes, note => Assert.Contains((int)note.NoteNumber % 12, allowed));
     }
 
     [Theory]
@@ -122,6 +136,8 @@ public class ApiTests
     [InlineData("{\"rootNote\":\"C#\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":16}", "Root note")]
     [InlineData("{\"rootNote\":\"A\\n\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":16}", "Root note")]
     [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Natural Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":16}", "Scale type")]
+    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"phrygian\",\"style\":\"Acid\",\"bpm\":140,\"bars\":16}", "Scale type")]
+    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"unknown\",\"style\":\"Acid\",\"bpm\":140,\"bars\":16}", "Scale type")]
     [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Unknown\",\"bpm\":140,\"bars\":16}", "Style")]
     [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":39,\"bars\":16}", "BPM")]
     [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":251,\"bars\":16}", "BPM")]
@@ -320,7 +336,12 @@ public class ApiTests
         void CheckChoices(string name, string[] expected) => Assert.Equal(expected,
             properties.GetProperty(name).GetProperty("enum").EnumerateArray().Select(e => e.GetString()));
         CheckChoices("rootNote", ["A", "B", "C", "D", "E", "F", "G"]);
-        CheckChoices("scaleType", ["Major", "Minor", "Dorian", "Mixolydian"]);
+        CheckChoices("scaleType", ["Major", "Minor", "Dorian", "Mixolydian", "Lydian", "Phrygian",
+            "Harmonic Minor", "Melodic Minor", "Major Pentatonic", "Minor Pentatonic", "Blues"]);
+        var scaleDescription = properties.GetProperty("scaleType").GetProperty("description").GetString()!;
+        Assert.Contains("Bright, floating, cinematic", scaleDescription);
+        Assert.Contains("Dark, tense, exotic", scaleDescription);
+        Assert.Contains("0, 3, 5, 6, 7, 10", scaleDescription);
         CheckChoices("style", ["Dreamy", "Pop", "Acid", "Rave"]);
         Assert.Equal(40, properties.GetProperty("bpm").GetProperty("minimum").GetInt32());
         Assert.Equal(250, properties.GetProperty("bpm").GetProperty("maximum").GetInt32());

@@ -48,7 +48,7 @@ builder.Services.AddControllers().ConfigureApiBehaviorOptions(options =>
             .Select(entry => entry.Key.ToLowerInvariant() switch
             {
                 "rootnote" => "Root note must be A, B, C, D, E, F, or G.",
-                "scaletype" => "Scale type must be Major, Minor, Dorian, or Mixolydian.",
+                "scaletype" => "Scale type must be one of the documented scale types.",
                 "style" => "Style is required and must be an available preset.",
                 "bpm" => "BPM must be an integer between 40 and 250.",
                 "bars" => "Bars must be an integer between 1 and 256.",

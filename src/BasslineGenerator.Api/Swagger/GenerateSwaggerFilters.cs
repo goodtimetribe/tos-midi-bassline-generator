@@ -1,5 +1,6 @@
 using BasslineGenerator.Api.Models;
 using BasslineGenerator.Interfaces;
+using BasslineGenerator.MusicTheory;
 using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
@@ -14,7 +15,10 @@ public sealed class GenerateRequestSchemaFilter(IEnumerable<IPreset> presets) : 
 
         schema.AdditionalPropertiesAllowed = true;
         SetChoices(schema.Properties["rootNote"], ["A", "B", "C", "D", "E", "F", "G"]);
-        SetChoices(schema.Properties["scaleType"], ["Major", "Minor", "Dorian", "Mixolydian"]);
+        var scale = schema.Properties["scaleType"];
+        SetChoices(scale, ScaleLibrary.All.Select(s => s.Name));
+        scale.Description = "Scale type (case-sensitive):\n\n" + string.Join("\n\n",
+            ScaleLibrary.All.Select(s => $"- **{s.Name}**: {s.Mood} Intervals: {string.Join(", ", s.Intervals)}."));
         SetChoices(schema.Properties["style"], presets.Select(p => p.World.ToString()));
     }
 
@@ -35,10 +39,10 @@ public sealed class GenerateExamplesFilter : IOperationFilter
         operation.Responses["200"].Content["audio/midi"].Schema = new OpenApiSchema { Type = "string", Format = "binary" };
         json.Examples = new Dictionary<string, OpenApiExample>
         {
-            ["Acid"] = Example("Acid bassline with overrides", "A", "Minor", "Acid", 140, 16, true),
-            ["Dreamy ambient"] = Example("Dreamy ambient", "D", "Dorian", "Dreamy", 95, 32),
-            ["Pop"] = Example("Pop bassline", "C", "Major", "Pop", 120, 16),
-            ["Rave"] = Example("Rave bassline", "E", "Minor", "Rave", 145, 64)
+            ["Acid"] = Example("Phrygian acid bassline with overrides", "A", "Phrygian", "Acid", 140, 16, true),
+            ["Dreamy ambient"] = Example("Lydian dreamy ambient", "D", "Lydian", "Dreamy", 95, 32),
+            ["Pop"] = Example("Major pentatonic pop bassline", "C", "Major Pentatonic", "Pop", 120, 16),
+            ["Rave"] = Example("Harmonic minor rave bassline", "E", "Harmonic Minor", "Rave", 145, 64)
         };
     }
 
