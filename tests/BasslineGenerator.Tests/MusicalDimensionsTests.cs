@@ -55,6 +55,23 @@ public class MusicalDimensionsTests
         }
     }
 
+    [Theory]
+    [InlineData(29, 16)]
+    [InlineData(301, 16)]
+    [InlineData(140, 513)]
+    public void CoreRejectsOutOfRangeTempoAndBars(int bpm, int bars)
+    {
+        var settings = new GeneratorSettings
+        {
+            BPM = bpm,
+            Bars = bars
+        };
+        if (bars > 512)
+            Assert.Throws<ArgumentException>(() => new Generator().Generate(settings));
+        else
+            Assert.Throws<ArgumentOutOfRangeException>(() => new Generator().Generate(settings));
+    }
+
     [Fact]
     public void MovementAndTensionChangePitchChoices()
     {

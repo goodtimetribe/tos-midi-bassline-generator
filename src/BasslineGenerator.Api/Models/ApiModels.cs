@@ -27,12 +27,12 @@ public sealed class GenerateRequest : IValidatableObject
 
     /// <summary>Tempo in beats per minute, inclusive.</summary>
     /// <example>140</example>
-    [Required, Range(4, 1000)]
+    [Required, Range(30, 300)]
     public int? Bpm { get; set; }
 
-    /// <summary>Length in bars (1–4096); in arrangement mode this is per section (maximum 682). Ignored for custom sections.</summary>
+    /// <summary>Length in bars (1–512); in arrangement mode this is per section. Ignored for custom sections.</summary>
     /// <example>16</example>
-    [Required, Range(1, 4096)]
+    [Required, Range(1, 512)]
     public int? Bars { get; set; }
 
     /// <summary>Case-sensitive generation mode. Omit or set to null for a single section; arrangement uses six preset sections.</summary>
@@ -78,7 +78,7 @@ public sealed class GenerateRequest : IValidatableObject
     /// <example>true</example>
     public bool? AccentDownbeats { get; set; }
 
-    /// <summary>Optional custom sequence of named sections; overrides single mode and cannot be combined with arrangement mode. Total length must be 1–4096 bars.</summary>
+    /// <summary>Optional custom sequence of named sections; overrides single mode and cannot be combined with arrangement mode. Each section is 1–512 bars and the total is at most 4096 bars.</summary>
     [SectionSequence]
     public List<SectionRequest?>? Sections { get; set; }
 
@@ -111,8 +111,6 @@ public sealed class GenerateRequest : IValidatableObject
     {
         if (Mode == GenerationModes.Arrangement && Sections is not null)
             yield return new ValidationResult("Custom sections cannot be combined with arrangement mode.", [nameof(Sections)]);
-        if (Mode == GenerationModes.Arrangement && Bars > 682)
-            yield return new ValidationResult("Arrangement bars must be between 1 and 682.", [nameof(Bars)]);
     }
 }
 
@@ -124,7 +122,7 @@ public sealed class SectionRequest
     /// <summary>Preset name, case-insensitive.</summary>
     /// <example>Dreamy</example>
     public string? Style { get; set; }
-    /// <summary>Section length in bars (1–4096).</summary>
+    /// <summary>Section length in bars (1–512).</summary>
     /// <example>4</example>
     public int Bars { get; set; }
 }
@@ -135,7 +133,7 @@ public sealed class SectionSequenceAttribute : ValidationAttribute
         && sections.Count > 0
         && sections.All(section => section is not null && section.Name is not null
             && section.Style is not null && Enum.GetNames<SongWorld>().Contains(section.Style.Trim(), StringComparer.OrdinalIgnoreCase)
-            && section.Bars is >= 1 and <= 4096)
+            && section.Bars is >= 1 and <= 512)
         && sections.Sum(section => (long)section!.Bars) <= 4096;
 }
 

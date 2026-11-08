@@ -12,8 +12,6 @@ try
     var mode = options.Mode ?? AskInt("Mode: 1. Single Section  2. Full Arrangement", 1, 2);
     if (mode == 2 && options.Style.HasValue)
         throw new ArgumentException("--style applies only to single-section mode.");
-    if (mode == 2 && options.Bars > 682)
-        throw new ArgumentException("--bars must be from 1 to 682 for an arrangement.");
     var style = mode == 1
         ? (SongWorld)((options.Style ?? AskInt("Style: 1. Dreamy  2. Pop  3. Acid  4. Rave", 1, 4)) - 1)
         : SongWorld.Dreamy;
@@ -26,8 +24,8 @@ try
     }
     var scalePrompt = "Scale: " + string.Join("  ", ScaleLibrary.All.Select((s, i) => $"{i + 1}. {s.Name}"));
     var scale = options.Scale ?? AskInt(scalePrompt, 1, ScaleLibrary.All.Count);
-    var bpm = options.Bpm ?? AskInt("BPM (4–1000)", 4, 1000);
-    var bars = options.Bars ?? AskInt(mode == 1 ? "Bars (1–4096)" : "Bars per section (1–682)", 1, mode == 1 ? 4096 : 682);
+    var bpm = options.Bpm ?? AskInt("BPM (30–300)", 30, 300);
+    var bars = options.Bars ?? AskInt(mode == 1 ? "Bars (1–512)" : "Bars per section (1–512)", 1, 512);
     if (!options.Progression.HasValue)
     {
         Console.WriteLine("Progression: 0. Random");

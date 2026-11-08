@@ -19,7 +19,7 @@ public sealed class BasslineGenerator(SectionGenerator sections, MotifGenerator 
     public GenerationResult Generate(GeneratorSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        if (settings.BPM is < 4 or > 1000) throw new ArgumentOutOfRangeException(nameof(settings.BPM));
+        if (settings.BPM is < 30 or > 300) throw new ArgumentOutOfRangeException(nameof(settings.BPM));
         if (settings.Channel is < 0 or > 15) throw new ArgumentOutOfRangeException(nameof(settings.Channel));
         if (settings.Velocity is < 1 or > 127) throw new ArgumentOutOfRangeException(nameof(settings.Velocity));
         if (settings.VelocityVariation is < 0 or > 127) throw new ArgumentOutOfRangeException(nameof(settings.VelocityVariation));
@@ -27,8 +27,8 @@ public sealed class BasslineGenerator(SectionGenerator sections, MotifGenerator 
         if (!double.IsFinite(settings.Swing) || settings.Swing is < 0 or > 0.5) throw new ArgumentOutOfRangeException(nameof(settings.Swing));
         var scale = ScaleLibrary.GetScale(settings.RootNote, settings.ScaleType);
         var song = settings.Sections?.ToArray() ?? [new SongSection("Single Section", settings.Style, settings.Bars)];
-        if (song.Length == 0 || song.Any(s => s is null || s.Bars < 1 || s.Bars > 4096) || song.Sum(s => (long)s.Bars) > 4096)
-            throw new ArgumentException("Sections must contain 1–4096 bars in total.", nameof(settings));
+        if (song.Length == 0 || song.Any(s => s is null || s.Bars < 1 || s.Bars > 512) || song.Sum(s => (long)s.Bars) > 4096)
+            throw new ArgumentException("Sections must contain 1–512 bars each and 1–4096 bars in total.", nameof(settings));
         var presetMap = presets.ToDictionary(p => p.World);
         if (song.Any(s => !presetMap.ContainsKey(s.Style))) throw new ArgumentException("Unknown style.", nameof(settings));
         foreach (var section in song) presetMap[section.Style].Dimensions.WithOverrides(settings).Validate();
