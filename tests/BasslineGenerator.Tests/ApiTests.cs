@@ -109,8 +109,10 @@ public class ApiTests
         Assert.Equal(bars * 4L * 480, midi.GetTrackChunks().Last().Events.Sum(e => e.DeltaTime));
     }
 
-    [Fact]
-    public async Task JsonGenerationResponseReturnsReplayableEffectiveConfiguration()
+    [Theory]
+    [InlineData(null)]
+    [InlineData(12345)]
+    public async Task JsonGenerationResponseReturnsReplayableEffectiveConfiguration(int? requestedSeed)
     {
         await using var factory = new WebApplicationFactory<Program>();
         using var client = factory.CreateClient();
@@ -119,7 +121,7 @@ public class ApiTests
             Content = JsonContent.Create(new
             {
                 rootNote = "A", scaleType = "Minor", style = "Acid", bpm = 140, bars = 2,
-                movement = 90, progression = "Synthwave"
+                movement = 90, progression = "Synthwave", seed = requestedSeed
             })
         };
         request.Headers.Accept.ParseAdd("application/json");
@@ -131,6 +133,7 @@ public class ApiTests
         var configuration = root.GetProperty("configuration");
         var seed = configuration.GetProperty("seed").GetInt32();
         Assert.InRange(seed, 0, int.MaxValue);
+        if (requestedSeed.HasValue) Assert.Equal(requestedSeed.Value, seed);
         Assert.Equal("A", configuration.GetProperty("rootNote").GetString());
         Assert.Equal("Minor", configuration.GetProperty("scaleType").GetString());
         Assert.Equal("Acid", configuration.GetProperty("style").GetString());
@@ -598,6 +601,7 @@ public class ApiTests
         using var ui = await client.GetAsync("/swagger/index.html");
         Assert.Equal(HttpStatusCode.OK, ui.StatusCode);
         Assert.Contains("bassline-form", await ui.Content.ReadAsStringAsync());
+        Assert.Contains("Download MIDI", await ui.Content.ReadAsStringAsync());
         using var document = JsonDocument.Parse(await client.GetStringAsync("/swagger/v1/swagger.json"));
         var generate = document.RootElement.GetProperty("paths").GetProperty("/api/generate").GetProperty("post");
         Assert.True(generate.GetProperty("requestBody").GetProperty("content").TryGetProperty("application/json", out _));
