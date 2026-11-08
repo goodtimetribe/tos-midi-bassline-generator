@@ -22,7 +22,11 @@ public class ApiTests
 {
     private static readonly object ValidRequest = new
     {
-        rootNote = "A", scaleType = "Minor", style = "Acid", bpm = 140, bars = 16
+        rootNote = "A",
+        scaleType = "Minor",
+        style = "Acid",
+        bpm = 140,
+        bars = 16
     };
 
     [Fact]
@@ -37,15 +41,19 @@ public class ApiTests
     }
 
     [Theory]
-    [InlineData(40, 1)]
-    [InlineData(250, 256)]
+    [InlineData(4, 1)]
+    [InlineData(1000, 256)]
     public async Task GenerateReturnsValidMidiInMemory(int bpm, int bars)
     {
         await using var factory = new WebApplicationFactory<Program>();
         using var client = factory.CreateClient();
         using var response = await client.PostAsJsonAsync("/api/generate", new
         {
-            rootNote = "A", scaleType = "Minor", style = "Acid", bpm, bars
+            rootNote = "A",
+            scaleType = "Minor",
+            style = "Acid",
+            bpm,
+            bars
         });
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("audio/midi", response.Content.Headers.ContentType?.MediaType);
@@ -58,6 +66,23 @@ public class ApiTests
         Assert.Equal((long)Math.Round(60_000_000.0 / bpm),
             midi.GetTrackChunks().First().Events.OfType<SetTempoEvent>().Single().MicrosecondsPerQuarterNote);
         Assert.Equal(bars * 4L * 480, midi.GetTrackChunks().Last().Events.Sum(e => e.DeltaTime));
+    }
+
+    [Theory]
+    [InlineData("single", 4096, 4096)]
+    [InlineData("arrangement", 682, 4092)]
+    public async Task MaximumCoreLengthsGenerateMidi(string mode, int bars, int expectedBars)
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        using var response = await client.PostAsJsonAsync("/api/generate", new
+        {
+            rootNote = "A", scaleType = "Minor", style = "Dreamy", bpm = 140, bars, mode, seed = 12345
+        });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var stream = new MemoryStream(await response.Content.ReadAsByteArrayAsync());
+        var midi = MidiFile.Read(stream);
+        Assert.Equal(expectedBars * 4L * 480, midi.GetTrackChunks().Last().Events.Sum(e => e.DeltaTime));
     }
 
     [Theory]
@@ -75,6 +100,8 @@ public class ApiTests
     [InlineData("Minor", "Acid", "E")]
     [InlineData("Minor", "Acid", "F")]
     [InlineData("Minor", "Acid", "G")]
+    [InlineData("Natural Minor", "acid", "C#")]
+    [InlineData("phrygian", "Acid", "bb")]
     public async Task SupportedMusicalSettingsGenerateMidi(string scaleType, string style, string rootNote)
     {
         await using var factory = new WebApplicationFactory<Program>();
@@ -123,8 +150,16 @@ public class ApiTests
         using var client = factory.CreateClient();
         using var response = await client.PostAsJsonAsync("/api/generate", new
         {
-            rootNote = "A", scaleType = "Minor", style = "Acid", bpm = 140, bars = 1,
-            movement = 70, groove = 80, mutation = 35, tension = 65, repetition = 85
+            rootNote = "A",
+            scaleType = "Minor",
+            style = "Acid",
+            bpm = 140,
+            bars = 1,
+            movement = 70,
+            groove = 80,
+            mutation = 35,
+            tension = 65,
+            repetition = 85
         });
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(generator.Settings);
@@ -132,18 +167,188 @@ public class ApiTests
             generator.Settings.Mutation, generator.Settings.Tension, generator.Settings.Repetition));
     }
 
+    [Fact]
+    public async Task GenerateForwardsModesAndProgressions()
+    {
+        var generator = new CapturingGenerator();
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IBassGenerator>();
+                services.AddSingleton<IBassGenerator>(generator);
+            }));
+        using var client = factory.CreateClient();
+
+        foreach (var progression in ChordProgressionLibrary.All)
+        {
+            using var response = await client.PostAsJsonAsync("/api/generate", new
+            {
+                rootNote = "A",
+                scaleType = "Minor",
+                style = "Acid",
+                bpm = 140,
+                bars = 1,
+                mode = "single",
+                progression = progression.Name
+            });
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal(progression.Name, generator.Settings!.Progression);
+            Assert.Null(generator.Settings.Sections);
+        }
+
+        using var arrangement = await client.PostAsJsonAsync("/api/generate", new
+        {
+            rootNote = "A",
+            scaleType = "Minor",
+            style = "Acid",
+            bpm = 140,
+            bars = 2,
+            mode = "arrangement",
+            progression = "i - VI - III - VII"
+        });
+        Assert.Equal(HttpStatusCode.OK, arrangement.StatusCode);
+        Assert.Equal("i - VI - III - VII", generator.Settings!.Progression);
+        Assert.Equal(Generation.BasslineGenerator.FullArrangement(2), generator.Settings.Sections);
+        using var stream = new MemoryStream(await arrangement.Content.ReadAsByteArrayAsync());
+        var midi = MidiFile.Read(stream);
+        Assert.Equal(12 * 4L * 480, midi.GetTrackChunks().Last().Events.Sum(e => e.DeltaTime));
+
+        using var defaults = await client.PostAsJsonAsync("/api/generate", new
+        {
+            rootNote = "A",
+            scaleType = "Minor",
+            style = "Acid",
+            bpm = 140,
+            bars = 1,
+            mode = (string?)null,
+            progression = (string?)null
+        });
+        Assert.Equal(HttpStatusCode.OK, defaults.StatusCode);
+        Assert.Null(generator.Settings!.Progression);
+        Assert.Null(generator.Settings.Sections);
+        Assert.Null(generator.Settings.Seed);
+        Assert.Equal((0, 100, 0, 0, 0.0, false), (generator.Settings.Channel, generator.Settings.Velocity,
+            generator.Settings.VelocityVariation, generator.Settings.TimingVariation, generator.Settings.Swing, generator.Settings.AccentDownbeats));
+    }
+
+    [Fact]
+    public async Task SeedAndAllCoreOptionsAreForwardedAndReproduceMidi()
+    {
+        var generator = new CapturingGenerator();
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IBassGenerator>();
+                services.AddSingleton<IBassGenerator>(generator);
+            }));
+        using var client = factory.CreateClient();
+        var request = new
+        {
+            rootNote = "C#",
+            scaleType = "major",
+            style = "Acid",
+            bpm = 140,
+            bars = 1,
+            seed = -12345,
+            channel = 15,
+            velocity = 80,
+            velocityVariation = 10,
+            timingVariation = 5,
+            swing = 0.25,
+            accentDownbeats = true,
+            sections = new[] { new { name = "Intro", style = "dreamy", bars = 2 }, new { name = "Drop", style = "Acid", bars = 3 } }
+        };
+        using var first = await client.PostAsJsonAsync("/api/generate", request);
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        var settings = generator.Settings!;
+        Assert.Equal("Major", settings.ScaleType);
+        Assert.Equal((-12345, 15, 80, 10, 5, 0.25, true),
+            (settings.Seed, settings.Channel, settings.Velocity, settings.VelocityVariation, settings.TimingVariation, settings.Swing, settings.AccentDownbeats));
+        Assert.Equal(new[] { new SongSection("Intro", SongWorld.Dreamy, 2), new SongSection("Drop", SongWorld.Acid, 3) }, settings.Sections);
+        var bytes = await first.Content.ReadAsByteArrayAsync();
+        using var coreStream = new MemoryStream();
+        new Export.MidiExporter().Write(new Generation.BasslineGenerator().Generate(settings), coreStream);
+        Assert.Equal(coreStream.ToArray(), bytes);
+        using var second = await client.PostAsJsonAsync("/api/generate", request);
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        Assert.Equal(bytes, await second.Content.ReadAsByteArrayAsync());
+        using var changed = await client.PostAsJsonAsync("/api/generate", new
+        {
+            rootNote = "C#",
+            scaleType = "major",
+            style = "Acid",
+            bpm = 140,
+            bars = 1,
+            seed = -12344,
+            channel = 15,
+            velocity = 80,
+            velocityVariation = 10,
+            timingVariation = 5,
+            swing = 0.25,
+            accentDownbeats = true,
+            request.sections
+        });
+        Assert.NotEqual(bytes, await changed.Content.ReadAsByteArrayAsync());
+        using var stream = new MemoryStream(bytes);
+        var midi = MidiFile.Read(stream);
+        Assert.Equal(5 * 4L * 480, midi.GetTrackChunks().Last().Events.Sum(e => e.DeltaTime));
+        Assert.All(midi.GetTrackChunks().SelectMany(t => t.Events).OfType<NoteOnEvent>(), e => Assert.Equal(15, (int)e.Channel));
+    }
+
     [Theory]
-    [InlineData("{\"rootNote\":\"C#\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":16}", "Root note")]
-    [InlineData("{\"rootNote\":\"A\\n\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":16}", "Root note")]
-    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Natural Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":16}", "Scale type")]
-    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"phrygian\",\"style\":\"Acid\",\"bpm\":140,\"bars\":16}", "Scale type")]
+    [InlineData("channel", "0", "15", "-1", "16")]
+    [InlineData("velocity", "1", "127", "0", "128")]
+    [InlineData("velocityVariation", "0", "127", "-1", "128")]
+    [InlineData("timingVariation", "0", "30", "-1", "31")]
+    [InlineData("swing", "0", "0.5", "-0.01", "0.51")]
+    [InlineData("seed", "-2147483648", "2147483647", "-2147483649", "2147483648")]
+    [InlineData("accentDownbeats", "true", "false", "1", "\"private input\"")]
+    public async Task CoreOptionBoundariesAreValidated(string name, string minimum, string maximum, string below, string above)
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        foreach (var (value, valid) in new[] { (minimum, true), (maximum, true), ("null", true), (below, false), (above, false) })
+        {
+            var body = $$"""{"rootNote":"A","scaleType":"Minor","style":"Acid","bpm":140,"bars":1,"{{name}}":{{value}}}""";
+            using var response = await client.PostAsync("/api/generate", new StringContent(body, Encoding.UTF8, "application/json"));
+            Assert.Equal(valid ? HttpStatusCode.OK : HttpStatusCode.BadRequest, response.StatusCode);
+            Assert.DoesNotContain("private input", await response.Content.ReadAsStringAsync());
+        }
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("[null]")]
+    [InlineData("[{\"name\":\"Intro\",\"style\":\"private input\",\"bars\":1}]")]
+    [InlineData("[{\"name\":\"Intro\",\"style\":\"Acid\",\"bars\":0}]")]
+    [InlineData("[{\"name\":\"Intro\",\"style\":\"Acid\",\"bars\":4096},{\"name\":\"Outro\",\"style\":\"Pop\",\"bars\":1}]")]
+    [InlineData("[{\"style\":\"Acid\",\"bars\":1}]")]
+    public async Task InvalidCustomSectionsReturnSafeBadRequest(string sections)
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var body = $$"""{"rootNote":"A","scaleType":"Minor","style":"Acid","bpm":140,"bars":1,"sections":{{sections}}}""";
+        using var response = await client.PostAsync("/api/generate", new StringContent(body, Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.DoesNotContain("private input", await response.Content.ReadAsStringAsync());
+    }
+
+    [Theory]
+    [InlineData("{\"rootNote\":\"H\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":16}", "Root note")]
     [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"unknown\",\"style\":\"Acid\",\"bpm\":140,\"bars\":16}", "Scale type")]
     [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Unknown\",\"bpm\":140,\"bars\":16}", "Style")]
-    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":39,\"bars\":16}", "BPM")]
-    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":251,\"bars\":16}", "BPM")]
+    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":3,\"bars\":16}", "BPM")]
+    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":1001,\"bars\":16}", "BPM")]
     [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":0}", "Bars")]
-    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":257}", "Bars")]
+    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":4097}", "Bars")]
+    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":683,\"mode\":\"arrangement\"}", "Bars")]
+    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":1,\"mode\":\"arrangement\",\"sections\":[{\"name\":\"Intro\",\"style\":\"Acid\",\"bars\":1}]}", "Sections")]
     [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140}", "Bars")]
+    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":1,\"mode\":\"Arrangement\"}", "Mode")]
+    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":1,\"mode\":\"private input\"}", "Mode")]
+    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":1,\"progression\":\"private input\"}", "Progression")]
+    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":1,\"progression\":\"I - vi - iii - vii\"}", "Progression")]
+    [InlineData("{\"rootNote\":\"A\",\"scaleType\":\"Minor\",\"style\":\"Acid\",\"bpm\":140,\"bars\":1,\"mode\":42}", "Invalid request")]
     [InlineData("{\"bpm\":\"private input\"}", "Invalid request")]
     [InlineData("{", "Invalid request")]
     [InlineData("null", "Invalid request")]
@@ -182,7 +387,8 @@ public class ApiTests
         await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
             builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["RateLimit:PermitLimit"] = "2", ["RateLimit:WindowSeconds"] = "60"
+                ["RateLimit:PermitLimit"] = "2",
+                ["RateLimit:WindowSeconds"] = "60"
             })));
         using var client = factory.CreateClient();
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/health")).StatusCode);
@@ -213,7 +419,8 @@ public class ApiTests
         {
             builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["RateLimit:PermitLimit"] = "1", ["RateLimit:WindowSeconds"] = "60"
+                ["RateLimit:PermitLimit"] = "1",
+                ["RateLimit:WindowSeconds"] = "60"
             }));
             builder.ConfigureServices(services => services.AddSingleton<IStartupFilter, TestAddressFilter>());
         });
@@ -246,7 +453,11 @@ public class ApiTests
         using var client = factory.CreateClient();
         using var invalid = await client.PostAsJsonAsync("/api/generate", new
         {
-            rootNote = "A", scaleType = "Minor", style = "private input", bpm = 140, bars = 16
+            rootNote = "A",
+            scaleType = "Minor",
+            style = "private input",
+            bpm = 140,
+            bars = 16
         });
         using var failed = await client.PostAsJsonAsync("/api/generate", ValidRequest);
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
@@ -335,18 +546,29 @@ public class ApiTests
         }
         void CheckChoices(string name, string[] expected) => Assert.Equal(expected,
             properties.GetProperty(name).GetProperty("enum").EnumerateArray().Select(e => e.GetString()));
-        CheckChoices("rootNote", ["A", "B", "C", "D", "E", "F", "G"]);
-        CheckChoices("scaleType", ["Major", "Minor", "Dorian", "Mixolydian", "Lydian", "Phrygian",
-            "Harmonic Minor", "Melodic Minor", "Major Pentatonic", "Minor Pentatonic", "Blues"]);
+        void CheckSuggestions(string name, string[] expected) => Assert.Equal(expected,
+            properties.GetProperty(name).GetProperty("x-suggested-values").EnumerateArray().Select(e => e.GetString()));
+        CheckSuggestions("rootNote", ["C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B"]);
+        CheckSuggestions("scaleType", ["Major", "Minor", "Dorian", "Mixolydian", "Lydian", "Phrygian",
+            "Harmonic Minor", "Melodic Minor", "Major Pentatonic", "Minor Pentatonic", "Blues", "Natural Minor"]);
         var scaleDescription = properties.GetProperty("scaleType").GetProperty("description").GetString()!;
         Assert.Contains("Bright, floating, cinematic", scaleDescription);
         Assert.Contains("Dark, tense, exotic", scaleDescription);
         Assert.Contains("0, 3, 5, 6, 7, 10", scaleDescription);
-        CheckChoices("style", ["Dreamy", "Pop", "Acid", "Rave"]);
-        Assert.Equal(40, properties.GetProperty("bpm").GetProperty("minimum").GetInt32());
-        Assert.Equal(250, properties.GetProperty("bpm").GetProperty("maximum").GetInt32());
+        CheckSuggestions("style", ["Dreamy", "Pop", "Acid", "Rave"]);
+        CheckChoices("mode", ["single", "arrangement"]);
+        CheckChoices("progression", ChordProgressionLibrary.All.Select(p => p.Name).ToArray());
+        foreach (var name in new[] { "mode", "progression" })
+        {
+            Assert.False(string.IsNullOrWhiteSpace(properties.GetProperty(name).GetProperty("description").GetString()));
+            Assert.True(properties.GetProperty(name).TryGetProperty("example", out _));
+        }
+        Assert.Equal(4, properties.GetProperty("bpm").GetProperty("minimum").GetInt32());
+        Assert.Equal(1000, properties.GetProperty("bpm").GetProperty("maximum").GetInt32());
         Assert.Equal(1, properties.GetProperty("bars").GetProperty("minimum").GetInt32());
-        Assert.Equal(256, properties.GetProperty("bars").GetProperty("maximum").GetInt32());
+        Assert.Equal(4096, properties.GetProperty("bars").GetProperty("maximum").GetInt32());
+        foreach (var name in new[] { "seed", "channel", "velocity", "velocityVariation", "timingVariation", "swing", "accentDownbeats", "sections" })
+            Assert.False(string.IsNullOrWhiteSpace(properties.GetProperty(name).GetProperty("description").GetString()));
         foreach (var name in new[] { "movement", "groove", "mutation", "tension", "repetition" })
         {
             var property = properties.GetProperty(name);
@@ -359,8 +581,8 @@ public class ApiTests
 
         var examples = generate.GetProperty("requestBody").GetProperty("content")
             .GetProperty("application/json").GetProperty("examples");
-        Assert.Equal(4, examples.EnumerateObject().Count());
-        foreach (var name in new[] { "Acid", "Dreamy ambient", "Pop", "Rave" })
+        Assert.Equal(5, examples.EnumerateObject().Count());
+        foreach (var name in new[] { "Acid", "Dreamy ambient", "Pop", "Rave", "Custom sections" })
         {
             using var response = await client.PostAsync("/api/generate",
                 new StringContent(examples.GetProperty(name).GetProperty("value").GetRawText(), Encoding.UTF8, "application/json"));

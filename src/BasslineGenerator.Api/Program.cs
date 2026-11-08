@@ -47,11 +47,21 @@ builder.Services.AddControllers().ConfigureApiBehaviorOptions(options =>
             .Where(entry => entry.Value?.Errors.Count > 0)
             .Select(entry => entry.Key.ToLowerInvariant() switch
             {
-                "rootnote" => "Root note must be A, B, C, D, E, F, or G.",
+                "rootnote" => "Root note must be a supported note name.",
                 "scaletype" => "Scale type must be one of the documented scale types.",
                 "style" => "Style is required and must be an available preset.",
-                "bpm" => "BPM must be an integer between 40 and 250.",
-                "bars" => "Bars must be an integer between 1 and 256.",
+                "bpm" => "BPM must be an integer between 4 and 1000.",
+                "bars" => "Bars must be an integer between 1 and 4096 (at most 682 per arrangement section).",
+                "mode" => "Mode must be single or arrangement.",
+                "progression" => "Progression must be one of the documented progression names.",
+                "sections" => "Sections must be a valid sequence of at most 4096 bars and cannot be combined with arrangement mode.",
+                "seed" => "Seed must be a signed 32-bit integer.",
+                "channel" => "Channel must be an integer between 0 and 15.",
+                "velocity" => "Velocity must be an integer between 1 and 127.",
+                "velocityvariation" => "Velocity variation must be an integer between 0 and 127.",
+                "timingvariation" => "Timing variation must be an integer between 0 and 30.",
+                "swing" => "Swing must be between 0 and 0.5.",
+                "accentdownbeats" => "Accent downbeats must be a boolean.",
                 "movement" or "groove" or "mutation" or "tension" or "repetition"
                     => "Musical dimensions must be integers between 0 and 100.",
                 _ => "Invalid request body or field value."

@@ -1,6 +1,7 @@
 using BasslineGenerator.Api.Models;
 using BasslineGenerator.Interfaces;
 using BasslineGenerator.Models;
+using BasslineGenerator.MusicTheory;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BasslineGenerator.Api.Controllers;
@@ -48,7 +49,7 @@ public sealed class BasslineController(
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status429TooManyRequests, "application/json")]
     public IActionResult Generate([FromBody] GenerateRequest request)
     {
-        var preset = presets.FirstOrDefault(p => string.Equals(p.World.ToString(), request.Style, StringComparison.Ordinal));
+        var preset = presets.FirstOrDefault(p => string.Equals(p.World.ToString(), request.Style?.Trim(), StringComparison.OrdinalIgnoreCase));
         if (preset is null)
         {
             logger.LogWarning("Request validation failed.");
@@ -58,7 +59,9 @@ public sealed class BasslineController(
         var settings = new GeneratorSettings
         {
             RootNote = request.RootNote!,
-            ScaleType = request.ScaleType!,
+            ScaleType = request.ScaleType!.Trim().Equals("Natural Minor", StringComparison.OrdinalIgnoreCase)
+                ? "Minor"
+                : ScaleLibrary.All.First(scale => scale.Name.Equals(request.ScaleType.Trim(), StringComparison.OrdinalIgnoreCase)).Name,
             Style = preset.World,
             BPM = request.Bpm!.Value,
             Bars = request.Bars!.Value,
@@ -66,7 +69,20 @@ public sealed class BasslineController(
             Groove = request.Groove,
             Mutation = request.Mutation,
             Tension = request.Tension,
-            Repetition = request.Repetition
+            Repetition = request.Repetition,
+            Progression = request.Progression,
+            Seed = request.Seed,
+            Channel = request.Channel ?? 0,
+            Velocity = request.Velocity ?? 100,
+            VelocityVariation = request.VelocityVariation ?? 0,
+            TimingVariation = request.TimingVariation ?? 0,
+            Swing = request.Swing ?? 0,
+            AccentDownbeats = request.AccentDownbeats ?? false,
+            Sections = request.Sections is not null
+                ? request.Sections.Select(section => new SongSection(section!.Name!, Enum.Parse<SongWorld>(section.Style!.Trim(), true), section.Bars)).ToArray()
+                : request.Mode == GenerationModes.Arrangement
+                ? Generation.BasslineGenerator.FullArrangement(request.Bars.Value)
+                : null
         };
         // The result and stream are request-local; no MIDI or settings are persisted.
         var result = generator.Generate(settings);

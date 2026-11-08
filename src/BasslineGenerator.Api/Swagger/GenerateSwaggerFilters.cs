@@ -11,20 +11,37 @@ public sealed class GenerateRequestSchemaFilter(IEnumerable<IPreset> presets) : 
 {
     public void Apply(OpenApiSchema schema, SchemaFilterContext context)
     {
+        if (context.Type == typeof(SectionRequest))
+        {
+            SetSuggestions(schema.Properties["style"], presets.Select(p => p.World.ToString()));
+            schema.Required = new HashSet<string> { "name", "style", "bars" };
+            schema.Properties["bars"].Minimum = 1;
+            schema.Properties["bars"].Maximum = 4096;
+            return;
+        }
         if (context.Type != typeof(GenerateRequest)) return;
 
         schema.AdditionalPropertiesAllowed = true;
-        SetChoices(schema.Properties["rootNote"], ["A", "B", "C", "D", "E", "F", "G"]);
+        SetSuggestions(schema.Properties["rootNote"], ["C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B"]);
         var scale = schema.Properties["scaleType"];
-        SetChoices(scale, ScaleLibrary.All.Select(s => s.Name));
-        scale.Description = "Scale type (case-sensitive):\n\n" + string.Join("\n\n",
+        SetSuggestions(scale, ScaleLibrary.All.Select(s => s.Name).Append("Natural Minor"));
+        scale.Description = "Scale type (case-insensitive); Natural Minor is an alias for Minor.\n\n" + string.Join("\n\n",
             ScaleLibrary.All.Select(s => $"- **{s.Name}**: {s.Mood} Intervals: {string.Join(", ", s.Intervals)}."));
-        SetChoices(schema.Properties["style"], presets.Select(p => p.World.ToString()));
+        SetSuggestions(schema.Properties["style"], presets.Select(p => p.World.ToString()));
+        SetChoices(schema.Properties["mode"], GenerationModes.All);
+        SetChoices(schema.Properties["progression"], ChordProgressionLibrary.All.Select(p => p.Name));
     }
 
     private static void SetChoices(OpenApiSchema schema, IEnumerable<string> values)
     {
         schema.Enum = values.Select(value => (IOpenApiAny)new OpenApiString(value)).ToList();
+    }
+
+    private static void SetSuggestions(OpenApiSchema schema, IEnumerable<string> values)
+    {
+        var choices = new OpenApiArray();
+        foreach (var value in values) choices.Add(new OpenApiString(value));
+        schema.Extensions["x-suggested-values"] = choices;
     }
 }
 
@@ -41,12 +58,26 @@ public sealed class GenerateExamplesFilter : IOperationFilter
         {
             ["Acid"] = Example("Phrygian acid bassline with overrides", "A", "Phrygian", "Acid", 140, 16, true),
             ["Dreamy ambient"] = Example("Lydian dreamy ambient", "D", "Lydian", "Dreamy", 95, 32),
-            ["Pop"] = Example("Major pentatonic pop bassline", "C", "Major Pentatonic", "Pop", 120, 16),
-            ["Rave"] = Example("Harmonic minor rave bassline", "E", "Harmonic Minor", "Rave", 145, 64)
+            ["Pop"] = Example("Major pentatonic full arrangement", "C", "Major Pentatonic", "Pop", 120, 16, arrangement: true),
+            ["Rave"] = Example("Harmonic minor rave bassline", "E", "Harmonic Minor", "Rave", 145, 64),
+            ["Custom sections"] = CustomSectionsExample()
         };
     }
 
-    private static OpenApiExample Example(string summary, string root, string scale, string style, int bpm, int bars, bool overrides = false)
+    private static OpenApiExample CustomSectionsExample()
+    {
+        var example = Example("Seeded custom arrangement", "C#", "Minor", "Acid", 140, 4);
+        var value = (OpenApiObject)example.Value;
+        value["seed"] = new OpenApiInteger(12345);
+        value["sections"] = new OpenApiArray
+        {
+            new OpenApiObject { ["name"] = new OpenApiString("Intro"), ["style"] = new OpenApiString("Dreamy"), ["bars"] = new OpenApiInteger(4) },
+            new OpenApiObject { ["name"] = new OpenApiString("Drop"), ["style"] = new OpenApiString("Acid"), ["bars"] = new OpenApiInteger(8) }
+        };
+        return example;
+    }
+
+    private static OpenApiExample Example(string summary, string root, string scale, string style, int bpm, int bars, bool overrides = false, bool arrangement = false)
     {
         var value = new OpenApiObject
         {
@@ -56,8 +87,14 @@ public sealed class GenerateExamplesFilter : IOperationFilter
             ["bpm"] = new OpenApiInteger(bpm),
             ["bars"] = new OpenApiInteger(bars)
         };
+        if (arrangement)
+        {
+            value["mode"] = new OpenApiString(GenerationModes.Arrangement);
+            value["progression"] = new OpenApiString("I - V - vi - IV");
+        }
         if (overrides)
         {
+            value["seed"] = new OpenApiInteger(12345);
             value["movement"] = new OpenApiInteger(70);
             value["groove"] = new OpenApiInteger(80);
             value["mutation"] = new OpenApiInteger(35);
