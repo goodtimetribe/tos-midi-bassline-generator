@@ -24,7 +24,8 @@ try
         try { NoteUtilities.PitchClass(root); }
         catch (ArgumentException) { Console.WriteLine("Enter a valid note name."); root = null; }
     }
-    var scale = options.Scale ?? AskInt("Scale: 1. Major  2. Minor  3. Dorian  4. Mixolydian", 1, 4);
+    var scalePrompt = "Scale: " + string.Join("  ", ScaleLibrary.All.Select((s, i) => $"{i + 1}. {s.Name}"));
+    var scale = options.Scale ?? AskInt(scalePrompt, 1, ScaleLibrary.All.Count);
     var bpm = options.Bpm ?? AskInt("BPM (4–1000)", 4, 1000);
     var bars = options.Bars ?? AskInt(mode == 1 ? "Bars (1–4096)" : "Bars per section (1–682)", 1, mode == 1 ? 4096 : 682);
     if (!options.Progression.HasValue)
@@ -38,7 +39,7 @@ try
     if (!confirm) return;
     var settings = new GeneratorSettings
     {
-        RootNote = root, ScaleType = new[] { "Major", "Minor", "Dorian", "Mixolydian" }[scale - 1],
+        RootNote = root, ScaleType = ScaleLibrary.All[scale - 1].Name,
         BPM = bpm, Bars = bars, Style = style,
         Progression = progression == 0 ? null : ChordProgressionLibrary.All[progression - 1].Name,
         Sections = mode == 2 ? BasslineGenerator.Generation.BasslineGenerator.FullArrangement(bars) : null

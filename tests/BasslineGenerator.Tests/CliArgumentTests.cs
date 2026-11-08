@@ -32,6 +32,19 @@ public class CliArgumentTests : IDisposable
         Assert.Equal(MidiFileFormat.MultiTrack, MidiFile.Read(file).OriginalFormat);
     }
 
+    [Theory]
+    [InlineData("Phrygian")]
+    [InlineData("Major Pentatonic")]
+    [InlineData("Blues")]
+    public async Task NewScaleNamesWorkInCli(string scale)
+    {
+        var result = await Run("", "--mode", "single", "--style", "acid", "--key", "A",
+            "--scale", scale, "--bpm", "140", "--bars", "1", "--progression", "random", "--yes");
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains($"Scale: {scale}", result.Output);
+        Assert.Single(Directory.GetFiles(directory, "*.mid"));
+    }
+
     [Fact]
     public async Task OmittedOptionsArePromptedAndNumericOptionsWork()
     {

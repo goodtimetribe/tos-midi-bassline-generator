@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using BasslineGenerator.MusicTheory;
 
 namespace BasslineGenerator.Api.Models;
 
@@ -9,14 +10,14 @@ public sealed class GenerateRequest
     [Required, RegularExpression("^[A-G]$(?![\\s\\S])", ErrorMessage = "Root note must be A, B, C, D, E, F, or G.")]
     public string? RootNote { get; set; }
 
-    /// <summary>Scale type: Major, Minor, Dorian, or Mixolydian. Values are case-sensitive.</summary>
-    /// <example>Minor</example>
-    [Required, RegularExpression("^(Major|Minor|Dorian|Mixolydian)$(?![\\s\\S])", ErrorMessage = "Scale type must be Major, Minor, Dorian, or Mixolydian.")]
+    /// <summary>Scale type. Values are case-sensitive; see the listed modes and their descriptions.</summary>
+    /// <example>Phrygian</example>
+    [Required, ScaleType]
     public string? ScaleType { get; set; }
 
     /// <summary>
     /// Case-sensitive style returned by the presets endpoint. Dreamy is sparse,
-    /// Pop is moderate, Acid adds chromatic and octave movement, and Rave is dense.
+    /// Pop is moderate, Acid adds scale approaches and octave movement, and Rave is dense.
     /// </summary>
     /// <example>Acid</example>
     [Required]
@@ -47,7 +48,7 @@ public sealed class GenerateRequest
     [Range(0, 100)]
     public int? Mutation { get; set; }
 
-    /// <summary>Tension from consonant chord tones (0) to unstable scale tones and chromatic approaches (100). Omit to use the style preset.</summary>
+    /// <summary>Tension from consonant chord tones (0) to unstable scale tones and approaches (100). Omit to use the style preset.</summary>
     /// <example>65</example>
     [Range(0, 100)]
     public int? Tension { get; set; }
@@ -56,6 +57,12 @@ public sealed class GenerateRequest
     /// <example>85</example>
     [Range(0, 100)]
     public int? Repetition { get; set; }
+}
+
+public sealed class ScaleTypeAttribute : ValidationAttribute
+{
+    public override bool IsValid(object? value) => value is null ||
+        value is string name && ScaleLibrary.All.Any(scale => scale.Name.Equals(name, StringComparison.Ordinal));
 }
 
 /// <summary>A safe, human-readable error response.</summary>

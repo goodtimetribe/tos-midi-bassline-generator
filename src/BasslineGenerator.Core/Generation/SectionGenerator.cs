@@ -54,7 +54,7 @@ public sealed class SectionGenerator(IRhythmGenerator rhythm, BassMovementGenera
             for (var i = 0; i < onsets.Length; i++)
             {
                 var choice = choices[i % choices.Length];
-                var pitch = movement.Pitch(choice.Movement, root, chord, scale, previousPitch, choice.Chromatic);
+                var pitch = movement.Pitch(choice.Movement, root, chord, scale, previousPitch, choice.DeepApproach);
                 if (i > 0 && choice.Traverse)
                     pitch = ScaleStep(previousPitch, scale, pitch >= previousPitch);
                 previousPitch = pitch;
@@ -76,7 +76,7 @@ public sealed class SectionGenerator(IRhythmGenerator rhythm, BassMovementGenera
         choices[0] = new PhraseChoice(BassMovement.Root, false, false);
         for (var i = 1; i < choices.Length; i++)
         {
-            if (choices[i - 1].Chromatic)
+            if (choices[i - 1].DeepApproach)
             {
                 choices[i] = new PhraseChoice(BassMovement.Root, false, false);
                 continue;
@@ -92,14 +92,14 @@ public sealed class SectionGenerator(IRhythmGenerator rhythm, BassMovementGenera
             if (choice is BassMovement.Seventh or BassMovement.PassingTone && random.Next(100) >= dimensions.Tension)
                 choice = BassMovement.Fifth;
             if (random.Next(100) < dimensions.Tension / 3) choice = BassMovement.PassingTone;
-            var chromatic = choice == BassMovement.PassingTone && random.Next(100) < dimensions.Tension;
+            var deepApproach = choice == BassMovement.PassingTone && random.Next(100) < dimensions.Tension;
             var traverse = choice != BassMovement.PassingTone && random.Next(100) < dimensions.Movement / 3;
-            choices[i] = new PhraseChoice(choice, chromatic, traverse);
+            choices[i] = new PhraseChoice(choice, deepApproach, traverse);
         }
         return choices;
     }
 
-    private readonly record struct PhraseChoice(BassMovement Movement, bool Chromatic, bool Traverse);
+    private readonly record struct PhraseChoice(BassMovement Movement, bool DeepApproach, bool Traverse);
 
     private IReadOnlyList<int> CreatePattern(RhythmDensity density, int groove, Random random)
     {

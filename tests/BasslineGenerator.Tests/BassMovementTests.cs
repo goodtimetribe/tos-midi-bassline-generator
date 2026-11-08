@@ -27,6 +27,6 @@ public class BassMovementTests
         var chord = new Chord(0, 3);
         Assert.Equal(48, generator.Pitch(BassMovement.Third, 45, chord, scale, 45, false));
         Assert.Equal(43, generator.Pitch(BassMovement.PassingTone, 45, chord, scale, 45, false));
-        Assert.Equal(44, generator.Pitch(BassMovement.PassingTone, 45, chord, scale, 45, true));
+        Assert.Equal(41, generator.Pitch(BassMovement.PassingTone, 45, chord, scale, 45, true));
     }
 }

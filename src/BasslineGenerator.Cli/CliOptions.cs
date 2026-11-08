@@ -49,7 +49,7 @@ internal sealed class CliOptions
             {
                 case "--mode": result.Mode = Choice(name, value, ["single", "arrangement"]); break;
                 case "--style": result.Style = Choice(name, value, ["dreamy", "pop", "acid", "rave"]); break;
-                case "--scale": result.Scale = Choice(name, value, ["major", "minor", "dorian", "mixolydian"]); break;
+                case "--scale": result.Scale = Choice(name, value, ScaleLibrary.All.Select(s => s.Name).ToArray()); break;
                 case "--key":
                     try { NoteUtilities.PitchClass(value); }
                     catch (ArgumentException) { throw new ArgumentException($"Invalid key: {value}."); }
@@ -104,7 +104,7 @@ internal sealed class CliOptions
               --mode <single|arrangement>       1 or 2
               --style <dreamy|pop|acid|rave>    1–4; single section only
               --key <note>                      e.g. A, C#, Bb
-              --scale <major|minor|dorian|mixolydian>  1–4
+              --scale <name|number>             see scales below; quote names with spaces
               --bpm <number>                    4–1000
               --bars <number>                   1–4096; 1–682 per arrangement section
               --progression <random|number|name>
@@ -112,9 +112,11 @@ internal sealed class CliOptions
               --yes                             shorthand for --confirm yes
               -h, --help                        show this help
 
-            Progressions (names are case-sensitive):
-              0. Random
             """);
+        Console.WriteLine("Scales:");
+        for (var i = 0; i < ScaleLibrary.All.Count; i++)
+            Console.WriteLine($"  {i + 1}. {ScaleLibrary.All[i].Name} — {ScaleLibrary.All[i].Mood}");
+        Console.WriteLine("Progressions (names are case-sensitive):\n  0. Random");
         for (var i = 0; i < ChordProgressionLibrary.All.Count; i++)
             Console.WriteLine($"  {i + 1}. {ChordProgressionLibrary.All[i].Name}");
     }

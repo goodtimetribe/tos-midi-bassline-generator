@@ -66,7 +66,9 @@ public class MusicalDimensionsTests
         var lowTension = GenerateMany(new(70, 40, 0, 0, 100));
         var highTension = GenerateMany(new(70, 40, 0, 100, 100));
         Assert.Equal(0, lowTension.Sum(notes => notes.Count(n => !scale.Contains(n.Pitch % 12))));
-        Assert.True(highTension.Sum(notes => notes.Count(n => !scale.Contains(n.Pitch % 12))) > 50);
+        Assert.Equal(0, highTension.Sum(notes => notes.Count(n => !scale.Contains(n.Pitch % 12))));
+        Assert.NotEqual(lowTension.SelectMany(notes => notes).Select(n => n.Pitch),
+            highTension.SelectMany(notes => notes).Select(n => n.Pitch));
     }
 
     [Fact]

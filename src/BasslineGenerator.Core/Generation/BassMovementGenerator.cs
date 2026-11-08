@@ -12,11 +12,16 @@ public sealed class BassMovementGenerator
             n < 85 ? BassMovement.Octave : n < 95 ? BassMovement.Third : BassMovement.PassingTone;
     }
 
+    /// <summary>
+    /// Resolves chord and approach tones to the selected scale. The legacy chromatic flag
+    /// selects a deeper diatonic approach instead of adding an out-of-scale note.
+    /// </summary>
     public int Pitch(BassMovement movement, int root, Chord chord, IReadOnlyList<int> scale, int previous, bool chromatic)
     {
         var chordRoot = root + chord.RootOffset;
         // Keep chord roots in a bass register while preserving their pitch class.
         while (chordRoot > 47) chordRoot -= 12;
+        chordRoot = NearestScalePitch(chordRoot, scale);
         var pitch = movement switch
         {
             BassMovement.Root => chordRoot,
@@ -24,9 +29,10 @@ public sealed class BassMovementGenerator
             BassMovement.Octave => chordRoot + 12,
             BassMovement.Third => chordRoot + chord.Third,
             BassMovement.Seventh => chordRoot + 10,
-            BassMovement.PassingTone => chromatic ? chordRoot - 1 : FindPassingTone(chordRoot, scale),
+            BassMovement.PassingTone => FindPassingTone(chordRoot, scale, chromatic ? 2 : 1),
             _ => throw new ArgumentOutOfRangeException(nameof(movement))
         };
+        pitch = NearestScalePitch(pitch, scale);
         // Invert fifths and thirds where this avoids an unnecessarily large leap.
         if (movement is BassMovement.Fifth or BassMovement.Third or BassMovement.Seventh)
         {
@@ -36,10 +42,25 @@ public sealed class BassMovementGenerator
         return Math.Clamp(pitch, 0, 127);
     }
 
-    private static int FindPassingTone(int root, IReadOnlyList<int> scale)
+    private static int FindPassingTone(int root, IReadOnlyList<int> scale, int steps)
     {
-        for (var distance = 1; distance <= 12; distance++)
-            if (scale.Contains((root - distance + 120) % 12)) return root - distance;
-        return root;
+        var pitch = root;
+        while (steps-- > 0)
+        {
+            do { pitch--; } while (!scale.Contains((pitch % 12 + 12) % 12));
+        }
+        return pitch;
+    }
+
+    private static int NearestScalePitch(int pitch, IReadOnlyList<int> scale)
+    {
+        for (var distance = 0; distance < 12; distance++)
+        {
+            var lower = pitch - distance;
+            if (lower >= 0 && scale.Contains(lower % 12)) return lower;
+            var upper = pitch + distance;
+            if (upper <= 127 && scale.Contains(upper % 12)) return upper;
+        }
+        throw new ArgumentException("Scale must contain a MIDI pitch class.", nameof(scale));
     }
 }

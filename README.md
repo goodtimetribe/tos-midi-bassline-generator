@@ -99,14 +99,36 @@ curl -X POST http://localhost:5080/api/generate \
 ```
 
 The root, scale, style, BPM and bars fields are required. Values are case-sensitive: `rootNote` is one of
-`A`, `B`, `C`, `D`, `E`, `F`, `G`; `scaleType` is `Major`, `Minor`, `Dorian`,
-or `Mixolydian`; and `style` is one of the returned presets. `bpm` is an integer
+`A`, `B`, `C`, `D`, `E`, `F`, `G`; `scaleType` is one of the scales listed
+below; and `style` is one of the returned presets. `bpm` is an integer
 from 40 to 250, and `bars` an integer from 1 to 256, inclusive. API input is
 intentionally narrower than the CLI and Core (which also support accidentals).
 The five optional integer dimensions range from 0 to 100. Omit a dimension or
 set it to `null` to use the selected style's default; individual values override
 only that dimension. In Core arrangements, defaults follow each section's style,
 while explicit overrides apply to every section.
+
+| Scale | Semitone intervals | Character |
+| --- | --- | --- |
+| Major | 0, 2, 4, 5, 7, 9, 11 | Bright and uplifting |
+| Minor | 0, 2, 3, 5, 7, 8, 10 | Dark and reflective (natural minor) |
+| Dorian | 0, 2, 3, 5, 7, 9, 10 | Minor with a bright, soulful color |
+| Mixolydian | 0, 2, 4, 5, 7, 9, 10 | Warm, bluesy and relaxed |
+| Lydian | 0, 2, 4, 6, 7, 9, 11 | Bright, floating, cinematic |
+| Phrygian | 0, 1, 3, 5, 7, 8, 10 | Dark, tense, exotic |
+| Harmonic Minor | 0, 2, 3, 5, 7, 8, 11 | Dramatic, epic, fantasy-inspired |
+| Melodic Minor | 0, 2, 3, 5, 7, 9, 11 | Sophisticated, jazzy, modern |
+| Major Pentatonic | 0, 2, 4, 7, 9 | Simple, open, uplifting |
+| Minor Pentatonic | 0, 3, 5, 7, 10 | Rock, blues, synthwave-friendly |
+| Blues | 0, 3, 5, 6, 7, 10 | Expressive, gritty, traditional blues vocabulary |
+
+Melodic Minor uses the ascending form in both directions. All generated notes,
+including chord and passing tones, are constrained to the chosen scale; chord
+tones outside it are mapped to the nearest scale tone. Try Lydian or Dorian
+with Dreamy, Minor or Phrygian with Acid, Minor or Harmonic Minor with Rave,
+and Major or Major Pentatonic with Pop. Swagger examples use these pairings;
+styles never override the selected scale. The API still requires a scale, and
+the Core default remains Minor.
 
 | Style | Movement | Groove | Mutation | Tension | Repetition |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -117,7 +139,7 @@ while explicit overrides apply to every section.
 
 Movement increases scale traversal and intervals; groove adds syncopation,
 offbeat accents and rests; mutation evolves phrases over time; tension adds
-less stable tones and chromatic approaches; repetition favors recurring motifs
+less stable scale tones and approaches; repetition favors recurring motifs
 and rhythms. Mutation and repetition are independent: high values for both
 produce a recurring theme that gradually evolves. Style also retains its
 characteristic density and note gate.
@@ -285,18 +307,18 @@ Notes use 4/4 time and a 480 PPQ grid. Rhythms are weighted selections of
 repeated bar patterns; phrase endings leave space for longer notes. A single
 chord-relative motif is reused throughout the song, with preset-specific
 variations. The progression advances one chord per bar, including across section
-boundaries. Dreamy is sparse, Pop is moderate, Acid adds chromatic approaches and
+boundaries. Dreamy is sparse, Pop is moderate, Acid adds scale approaches and
 octave movement, and Rave uses dense, repetitive patterns. The full arrangement
 uses Intro (Dreamy), Build (Pop), Breakdown (Dreamy), Drop (Acid), Peak (Rave),
 and Outro (Dreamy); the CLI bar count is **per section**.
 
-Scale degrees and pitch classes support Major, Natural Minor (`Minor`), Dorian,
-and Mixolydian; sharps and flats such as `C#` and `Bb` are accepted. Progression
-names preserve Roman numeral case and specify actual major/minor chord qualities
-and semitone roots relative to the selected tonic. Consequently, a chosen
-progression can deliberately borrow notes outside the selected scale (including
-the major V in `i - V - VI - IV`); scale tones are used for non-chromatic
-passing notes. Random selection chooses from the major-family or minor-family
+Scale degrees and pitch classes support all the scales listed above; Core also
+accepts `Natural Minor` as an alias for `Minor` and roots with sharps or flats
+such as `C#` and `Bb`. Progression names preserve Roman numeral case and
+describe their written major/minor chord qualities and roots relative to the
+tonic. Chord tones that do not belong to the selected scale are mapped to the
+nearest scale tone, so their sounding quality can differ from the written
+progression. Random selection chooses from the major-family or minor-family
 progressions according to the scale.
 
 ## Programmatic use
