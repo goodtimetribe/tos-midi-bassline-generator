@@ -75,10 +75,11 @@ this exposure before deploying sensitive endpoints. Set `ASPNETCORE_ENVIRONMENT`
 environments and listen addresses.
 
 In Swagger, expand **Generation → POST /api/generate** and select **Try it out**
-to choose notes, scales, and styles from dropdowns and enter the tempo and
-length. The form updates the JSON request editor, which remains available for
-manual editing. The examples selector offers Dreamy ambient, Pop, Acid, and
-Rave starting points; selecting an example also updates the form.
+to choose notes, scales, styles, modes, and progressions from dropdowns and enter the tempo and
+length, seed, MIDI and humanization settings. Enter custom sections as a JSON
+array in the sections field and leave the field to apply it. The form updates the JSON request editor, which remains available for
+manual editing. The examples selector offers Dreamy ambient, Pop, Acid, Rave,
+and custom-section starting points; selecting an example also updates the form.
 
 | Method and path | Description |
 | --- | --- |
@@ -88,24 +89,48 @@ Rave starting points; selecting an example also updates the form.
 
 ### Generate Sample Bassline
 
-Select one of the four style examples in Swagger, or use this Acid example
+Select a Swagger example, or use this Acid example
 directly. The `-o` option saves the MIDI response **on the client**:
 
 ```sh
 curl -X POST http://localhost:5080/api/generate \
   -H 'Content-Type: application/json' \
-  -d '{"rootNote":"A","scaleType":"Minor","style":"Acid","bpm":140,"bars":16,"movement":70,"groove":80,"mutation":35,"tension":65,"repetition":85}' \
+  -d '{"rootNote":"A","scaleType":"Minor","style":"Acid","bpm":140,"bars":16,"seed":12345,"movement":70,"groove":80,"mutation":35,"tension":65,"repetition":85}' \
   -o bassline.mid
 ```
 
-The root, scale, style, BPM and bars fields are required. Values are case-sensitive: `rootNote` is one of
-`A`, `B`, `C`, `D`, `E`, `F`, `G`; `scaleType` is one of the scales listed
-below; and `style` is one of the returned presets. `bpm` is an integer
-from 40 to 250, and `bars` an integer from 1 to 256, inclusive. API input is
-intentionally narrower than the CLI and Core (which also support accidentals).
+The root, scale, style, BPM and bars fields are required. `rootNote` supports
+natural notes and the same sharps and flats as the CLI (for example `C#` and
+`Bb`); `scaleType` is one of the scales listed below, with `Natural Minor` an
+alias for `Minor`; and `style` is one of the returned presets. These names are
+case-insensitive. `bpm` is an integer from 4 to 1000, and `bars` is an integer
+from 1 to 4096, inclusive.
+Optional `mode` is case-sensitive: `single` (the default) generates one section,
+and `arrangement` generates the six sections described below. In arrangement
+mode, `bars` is per section (up to 682 per section); `style` is still required
+but the arrangement uses its own section styles. Optional `progression` selects
+one of the case-sensitive names listed in Swagger; omit it or use `null` for a
+random progression chosen for the scale. Omit `mode` or use `null` for single
+mode.
+
+To specify a custom arrangement instead, provide `sections`, for example
+`[{"name":"Intro","style":"Dreamy","bars":4},{"name":"Drop","style":"Acid","bars":8}]`.
+The list must be nonempty and total at most 4096 bars; it overrides single mode
+and cannot be combined with `mode: "arrangement"`. The top-level `style` and
+`bars` are still required but are not used for custom sections.
+
+Specify `seed` as a signed 32-bit integer to reproduce the same MIDI from the
+same settings and engine version, including when progression is random. Save
+both the seed and settings to recall a pattern; when omitted, the seed is not
+returned. Optional MIDI and humanization controls are `channel` (0–15, default
+0), `velocity` (1–127, default 100), `velocityVariation` (0–127, default 0),
+`timingVariation` (0–30 ticks, default 0), `swing` (0–0.5 of an eighth note,
+default 0), and `accentDownbeats` (boolean, default false). Omit them or use
+`null` for defaults.
+
 The five optional integer dimensions range from 0 to 100. Omit a dimension or
 set it to `null` to use the selected style's default; individual values override
-only that dimension. In Core arrangements, defaults follow each section's style,
+only that dimension. In arrangements, defaults follow each section's style,
 while explicit overrides apply to every section.
 
 | Scale | Semitone intervals | Character |
@@ -145,7 +170,7 @@ produce a recurring theme that gradually evolves. Style also retains its
 characteristic density and note gate.
 
 Invalid input returns HTTP 400, for example
-`{"error":"BPM must be an integer between 40 and 250."}`. Unexpected failures
+`{"error":"BPM must be an integer between 4 and 1000."}`. Unexpected failures
 return HTTP 500 and `{"error":"An unexpected error occurred."}`. A rate-limited
 request returns HTTP 429 and `{"error":"Too many requests."}`. The future
 analysis, variation, and arrangement controllers are extension points, not
@@ -310,7 +335,7 @@ variations. The progression advances one chord per bar, including across section
 boundaries. Dreamy is sparse, Pop is moderate, Acid adds scale approaches and
 octave movement, and Rave uses dense, repetitive patterns. The full arrangement
 uses Intro (Dreamy), Build (Pop), Breakdown (Dreamy), Drop (Acid), Peak (Rave),
-and Outro (Dreamy); the CLI bar count is **per section**.
+and Outro (Dreamy); the CLI and API arrangement bar counts are **per section**.
 
 Scale degrees and pitch classes support all the scales listed above; Core also
 accepts `Natural Minor` as an alias for `Minor` and roots with sharps or flats

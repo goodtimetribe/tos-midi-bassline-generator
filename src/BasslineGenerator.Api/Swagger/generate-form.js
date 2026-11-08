@@ -15,28 +15,46 @@
         const fields = {};
         const message = document.createElement("div");
         message.setAttribute("role", "status");
+        let invalidSections = false;
 
         for (const [name, property] of Object.entries(schema.properties)) {
+            const choices = property.enum || property["x-suggested-values"];
             const label = document.createElement("label");
             label.style.cssText = "display:inline-flex;flex-direction:column;gap:4px;margin:0 12px 12px 0";
             label.textContent = name + (property.minimum != null && property.maximum != null
                 ? ` (${property.minimum}-${property.maximum})` : "");
             label.title = property.description || "";
-            const field = document.createElement(property.enum ? "select" : "input");
+            const field = document.createElement(name === "sections" ? "textarea" : choices || property.type === "boolean" ? "select" : "input");
             field.setAttribute("aria-label", name);
             field.dataset.property = name;
-            if (property.enum) {
-                for (const value of property.enum) {
+            if (choices) {
+                if (!schema.required?.includes(name)) {
+                    const option = document.createElement("option");
+                    option.value = "";
+                    option.textContent = name === "mode" ? "Default (single)" : "Default (random)";
+                    field.appendChild(option);
+                }
+                for (const value of choices) {
                     const option = document.createElement("option");
                     option.value = value;
                     option.textContent = value;
                     field.appendChild(option);
                 }
+            } else if (property.type === "boolean") {
+                for (const [value, text] of [["", "Default (false)"], ["true", "true"], ["false", "false"]]) {
+                    const option = document.createElement("option");
+                    option.value = value;
+                    option.textContent = text;
+                    field.appendChild(option);
+                }
+            } else if (name === "sections") {
+                field.placeholder = '[{"name":"Intro","style":"Dreamy","bars":4}]';
+                field.rows = 3;
             } else {
                 field.type = "number";
                 if (property.minimum != null) field.min = property.minimum;
                 if (property.maximum != null) field.max = property.maximum;
-                field.step = "1";
+                field.step = property.type === "number" ? "any" : "1";
             }
             fields[name] = field;
             label.appendChild(field);
@@ -54,9 +72,17 @@
         function readBody() {
             try {
                 const body = parseBody();
-                for (const [name, field] of Object.entries(fields))
-                    field.value = body[name] ?? "";
-                message.textContent = "";
+                for (const [name, field] of Object.entries(fields)) {
+                    if (name === "sections" && invalidSections) continue;
+                    field.value = name === "sections" && body[name] != null
+                        ? JSON.stringify(body[name], null, 2) : body[name] ?? "";
+                    if (field.tagName === "SELECT" && field.selectedIndex === -1 && typeof body[name] === "string") {
+                        const match = Array.from(field.options).find(option =>
+                            option.value.toLowerCase() === body[name].trim().toLowerCase());
+                        if (match) field.value = match.value;
+                    }
+                }
+                if (!invalidSections) message.textContent = "";
             } catch {
                 message.textContent = "Enter a JSON object in the request body before using the form.";
             }
@@ -70,12 +96,38 @@
                 return;
             }
             const field = event.target;
-            if (field.type === "number" && field.value === "" && !schema.required?.includes(field.dataset.property))
+            if (field.dataset.property === "sections" && event.type === "input") {
+                try {
+                    if (field.value.trim() && !Array.isArray(JSON.parse(field.value))) throw new Error();
+                    invalidSections = false;
+                    if (!invalidSections) message.textContent = "";
+                } catch {
+                    invalidSections = true;
+                    message.textContent = "Enter a JSON array of sections before applying the field.";
+                }
+                return;
+            }
+            if (field.value === "" && !schema.required?.includes(field.dataset.property))
                 delete body[field.dataset.property];
+            else if (field.dataset.property === "sections") {
+                try {
+                    const sections = JSON.parse(field.value);
+                    if (!Array.isArray(sections)) throw new Error();
+                    body.sections = sections;
+                    invalidSections = false;
+                } catch {
+                    invalidSections = true;
+                    message.textContent = "Enter a JSON array of sections before applying the field.";
+                    return;
+                }
+            }
             else
                 body[field.dataset.property] = field.type === "number"
                     ? (field.value === "" ? null : Number(field.value))
+                    : schema.properties[field.dataset.property].type === "boolean"
+                    ? field.value === "true"
                     : field.value;
+            message.textContent = "";
             const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
             setter.call(textarea, JSON.stringify(body, null, 2));
             textarea.dispatchEvent(new Event("input", { bubbles: true }));
@@ -83,8 +135,16 @@
 
         form.addEventListener("input", writeBody);
         form.addEventListener("change", writeBody);
-        form.addEventListener("sync-example", readBody);
+        form.addEventListener("sync-example", () => { invalidSections = false; readBody(); });
         textarea.addEventListener("input", readBody);
+        operation.addEventListener("click", event => {
+            if (form.isConnected && !textarea.disabled && event.target.closest(".execute") && invalidSections) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                message.textContent = "Enter a JSON array of sections before executing the request.";
+                fields.sections.focus();
+            }
+        }, true);
         readBody();
         textarea.parentElement.insertBefore(form, textarea);
     }
