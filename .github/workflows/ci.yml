@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy the validated main branch to the VPS
+        type: boolean
+        default: false
   workflow_call:
 
 permissions:
@@ -42,3 +47,72 @@ jobs:
           path: ${{ runner.temp }}/basslinegenerator-api
           retention-days: 7
           if-no-files-found: error
+
+  deploy:
+    name: Deploy to VPS
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.deploy)
+    needs: build-test-publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: basslinegenerator-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Require main branch
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "Deployments must run from main." >&2
+          exit 1
+
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -eu
+          test -n "$VPS_SSH_KEY"
+          test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/deploy_key"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/deploy_key" "$HOME/.ssh/known_hosts"
+
+      - name: Publish, restart, and check health
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USERNAME: ${{ secrets.VPS_USERNAME }}
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          test -n "$VPS_HOST"
+          test -n "$VPS_USERNAME"
+          ssh -i "$HOME/.ssh/deploy_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+            -- "$VPS_USERNAME@$VPS_HOST" bash -s -- "$DEPLOY_SHA" <<'REMOTE'
+          set -eu
+          cd /usr/local/src/tos-midi-bassline-generator
+          test "$(git symbolic-ref --short HEAD)" = main
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Server checkout is not clean; refusing to deploy." >&2
+            exit 1
+          fi
+          git pull --ff-only origin main
+          if [ "$(git rev-parse HEAD)" != "$1" ]; then
+            echo "Server main does not match the validated commit; refusing to deploy." >&2
+            exit 1
+          fi
+          dotnet publish src/BasslineGenerator.Api -c Release -o /opt/basslinegenerator
+          sudo -n systemctl restart basslinegenerator
+          systemctl is-active --quiet basslinegenerator
+          status=$(curl --fail --silent --show-error --retry 5 --retry-delay 3 \
+            --retry-all-errors --connect-timeout 10 --max-time 20 \
+            --output /dev/null --write-out '%{http_code}' \
+            https://bassapi.beyond-earth.net/api/health)
+          case "$status" in
+            2??) echo "Health check passed (HTTP $status)." ;;
+            *) echo "Health check failed (HTTP $status)." >&2; exit 1 ;;
+          esac
+          REMOTE
