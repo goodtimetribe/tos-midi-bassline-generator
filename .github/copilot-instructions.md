@@ -9,5 +9,5 @@
   when changing its contract.
 - Run relevant tests with `dotnet test`; CI also builds and publishes the API
   in Release configuration.
-- Deployment is managed by `.github/workflows/deploy.yml`. Keep deployment
+- Deployment is managed by `.github/workflows/ci.yml`. Keep deployment
   documentation in the README aligned with workflow and operational changes.

@@ -1,7 +1,6 @@
 # BasslineGenerator
 
 [![CI](https://github.com/goodtimetribe/tos-midi-bassline-generator/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/goodtimetribe/tos-midi-bassline-generator/actions/workflows/ci.yml)
-[![Deploy API](https://github.com/goodtimetribe/tos-midi-bassline-generator/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/goodtimetribe/tos-midi-bassline-generator/actions/workflows/deploy.yml)
 
 A .NET 10 library, console application, and HTTP API for generating motif-based electronic
 basslines as standard MIDI type 1 files. Import the resulting MIDI into a DAW or
@@ -281,18 +280,18 @@ intermediaries remain responsible for their own handling of the response.
 
 ## CI/CD architecture
 
-GitHub Actions runs CI on pull requests and pushes to `main`, or manually from
-**Actions → CI**: it restores, builds, and tests the solution with the .NET 10
-SDK, then publishes the API. The `basslinegenerator-api` workflow artifact is
-retained for seven days.
+GitHub Actions runs the CI workflow on pull requests and pushes to `main`,
+or manually from **Actions → CI**. It restores, builds, and tests the solution
+with the .NET 10 SDK, then publishes the API. The `basslinegenerator-api`
+workflow artifact is retained for seven days.
 
-The deployment workflow runs on pushes to `main` and can also be started
-manually from **Actions → Deploy API** using the `main` branch. It runs the
-same CI checks before connecting to the VPS over SSH. On the VPS it pulls
-`main`, publishes to `/opt/basslinegenerator`, restarts the
-`basslinegenerator` systemd service, and checks both service status and the
-public health endpoint. A push to `main` therefore runs CI twice: once as
-the normal CI workflow and once as a deployment prerequisite. The artifact
+After validation succeeds, pushes to `main` deploy automatically. To deploy
+manually, select the `main` branch and enable **Deploy the validated main
+branch to the VPS** when running **Actions → CI**. Leave it disabled for a
+CI-only run. Pull requests and reusable workflow calls do not deploy.
+Deployment connects to the VPS over SSH, pulls `main`, publishes to
+`/opt/basslinegenerator`, restarts the `basslinegenerator` systemd service,
+and checks both service status and the public health endpoint. The artifact
 is for inspection or download; deployment publishes from the VPS checkout.
 
 ### Developer flow
@@ -308,7 +307,7 @@ merging. A manual deployment also validates `main` before deploying it.
 ### Production topology
 
 ```text
-GitHub main -> Deploy API -> CI validation -> SSH -> VPS checkout
+GitHub main -> CI validation -> Deploy to VPS -> SSH -> VPS checkout
                                                   -> dotnet publish -> /opt/basslinegenerator
                                                   -> systemd restart -> public health check
 HTTP client -> Cloudflare / Apache -> basslinegenerator systemd service
@@ -364,7 +363,7 @@ Prefer reverting the faulty change on `main` and letting the normal deployment
 workflow validate and deploy the revert. Identify the last known-good commit
 and the changes to undo, then create a revert pull request (for a merge commit,
 select the appropriate mainline parent). After it merges, monitor **Actions →
-Deploy API** and verify `https://bassapi.beyond-earth.net/api/health` and the
+CI** and verify `https://bassapi.beyond-earth.net/api/health` and the
 affected behavior. If deployment fails, use the troubleshooting steps below.
 
 Do not reset or detach the VPS checkout to an older commit: subsequent
