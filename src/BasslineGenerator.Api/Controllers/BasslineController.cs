@@ -117,7 +117,7 @@ public sealed class BasslineController(
     }
 
     /// <summary>Replays an edited or saved generation package.</summary>
-    /// <remarks>Regenerates notes and statistics from the package's version, seed and effective configuration; any supplied notes and statistics are ignored. Per-section behavior is authoritative.</remarks>
+    /// <remarks>Regenerates notes and statistics from the package's format version, engine version, seed and effective configuration; any supplied notes and statistics are ignored. Per-section behavior is authoritative. Packages without an engine version are treated as legacy engine 1.0.0.</remarks>
     /// <response code="200">The regenerated package.</response>
     /// <response code="400">The package is invalid or has an unsupported version.</response>
     [HttpPost("package/regenerate")]
@@ -129,21 +129,52 @@ public sealed class BasslineController(
     public IActionResult Regenerate([FromBody] GenerationPackage package) =>
         packages.TryRegenerate(package, out var result) ? Ok(result) : InvalidPackage();
 
-    /// <summary>Creates a deterministic share code for a generation package.</summary>
-    /// <remarks>The code is a URL-safe, compressed encoding of the package's version, seed and effective configuration. It is computed on the fly; nothing is stored. Equal configurations always produce equal codes.</remarks>
-    /// <response code="200">The share code.</response>
+    /// <summary>Downloads MIDI replayed from a saved or edited generation package.</summary>
+    /// <remarks>Uses the same replay as package regeneration. Supplied notes and statistics are ignored; the format and engine versions must be supported. Packages without an engine version are treated as legacy engine 1.0.0.</remarks>
+    /// <response code="200">The regenerated MIDI file.</response>
     /// <response code="400">The package is invalid or has an unsupported version.</response>
+    /// <response code="429">The rate limit was exceeded.</response>
+    /// <response code="500">An unexpected server error occurred.</response>
+    [HttpPost("package/midi")]
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(byte[]), StatusCodes.Status200OK, "audio/midi")]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status400BadRequest, "application/json")]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status429TooManyRequests, "application/json")]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status500InternalServerError, "application/json")]
+    public IActionResult PackageMidi([FromBody] GenerationPackage package)
+    {
+        if (!packages.TryReplay(package, out var result)) return InvalidPackage();
+        using var stream = new MemoryStream();
+        exporter.Write(result, stream);
+        return File(stream.ToArray(), "audio/midi", "bassline.mid");
+    }
+
+    /// <summary>Creates a deterministic share code for a generation package.</summary>
+    /// <remarks>The code is a URL-safe, compressed encoding of the package's format and engine versions, seed and effective configuration. The encoded JSON is limited to 1,048,576 bytes and the code to 262,144 characters; oversized packages are rejected. Nothing is stored.</remarks>
+    /// <response code="200">The share code.</response>
+    /// <response code="400">The package is invalid, unsupported, or too large to share.</response>
     [HttpPost("share")]
     [Consumes("application/json")]
     [ProducesResponseType<ShareResponse>(StatusCodes.Status200OK, "application/json")]
     [ProducesResponseType<ErrorResponse>(StatusCodes.Status400BadRequest, "application/json")]
     [ProducesResponseType<ErrorResponse>(StatusCodes.Status429TooManyRequests, "application/json")]
     [ProducesResponseType<ErrorResponse>(StatusCodes.Status500InternalServerError, "application/json")]
-    public IActionResult Share([FromBody] GenerationPackage package) =>
-        packages.TryRegenerate(package, out var result) ? Ok(new ShareResponse(ShareCodec.Encode(result))) : InvalidPackage();
+    public IActionResult Share([FromBody] GenerationPackage package)
+    {
+        if (!packages.TryRegenerate(package, out var result)) return InvalidPackage();
+        try
+        {
+            return Ok(new ShareResponse(ShareCodec.Encode(result)));
+        }
+        catch (ShareCodeTooLargeException)
+        {
+            logger.LogWarning("Package exceeds share code limits.");
+            return BadRequest(new ErrorResponse("Package is too large to share."));
+        }
+    }
 
     /// <summary>Decodes a share code into a full generation package.</summary>
-    /// <remarks>Notes and statistics are regenerated from the encoded configuration.</remarks>
+    /// <remarks>Notes and statistics are regenerated from the encoded configuration. The format and engine versions must be supported; missing engine versions are treated as legacy engine 1.0.0.</remarks>
     /// <response code="200">The generation package.</response>
     /// <response code="400">The share code is malformed or unsupported.</response>
     [HttpPost("share/decode")]

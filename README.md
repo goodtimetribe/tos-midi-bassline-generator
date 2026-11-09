@@ -96,6 +96,7 @@ as the response media type before executing to download MIDI directly.
 | `POST /api/generate` | Returns a downloadable `bassline.mid` (`audio/midi`) by default, or effective generation metadata (`application/json`) when requested. |
 | `POST /api/generate/package` | Same request as `/api/generate`; returns a JSON generation package (no MIDI). |
 | `POST /api/package/regenerate` | Replays a saved or edited package and returns a fresh one. |
+| `POST /api/package/midi` | Replays a saved or edited package and returns a downloadable MIDI file. |
 | `POST /api/share` | Package in, `{"shareCode":"..."}` out. |
 | `POST /api/share/decode` | `{"shareCode":"..."}` in, package out. |
 
@@ -114,10 +115,12 @@ defaults vary by section.
 ### Generation packages and share codes
 
 A generation package is a portable, versioned JSON asset:
-`{"version":1,"seed":12345,"effectiveConfiguration":{...},"statistics":{...},"notes":[...]}`.
-`effectiveConfiguration` holds every resolved value (seed, key, scale, style,
-progression, MIDI settings and each section's behavior dimensions), so the same
-package reproduces the same bassline with the same engine version. A random
+`{"version":1,"engineVersion":"1.0.0","seed":12345,"effectiveConfiguration":{...},"statistics":{...},"notes":[...]}`.
+`version` identifies the package format; `engineVersion` identifies the generation
+algorithm and its compatibility-sensitive defaults. The effective configuration
+records the seed, key, scale, style, selected progression metadata, MIDI settings
+and each section's behavior dimensions. Replay also depends on the matching
+engine, including its preset density and gate and progression library. A random
 seed is chosen when none is supplied and reported in the package.
 Each note is `{"note":"A2","midiNote":45,"startBeat":4.0,"durationBeats":0.5,"velocity":96}`
 (C4 = 60; beats are quarter notes), enough for piano-roll, timeline and density
@@ -128,10 +131,30 @@ count and arrangement length.
 To save, load, edit or clone, keep the package JSON. Edit
 `effectiveConfiguration` (per-section `behavior` values are authoritative on
 replay) and submit it to `/api/package/regenerate`; `notes` and `statistics`
-are ignored on input and recomputed. `seed` must match the configuration's seed
-and `version` must be supported. Share codes are deterministic URL-safe encodings
-(deflate + base64url) of the version and effective configuration; decoding
-regenerates notes and statistics. Nothing is stored server-side. Existing
+are ignored on input and recomputed. Submit the same package to
+`/api/package/midi` to download the MIDI produced by that replay. `seed` must
+match the configuration's seed. When editing progression, change
+`requestedProgression` (null selects randomly using the seed); the selected
+progression metadata is derived on replay.
+
+The current engine supports package format 1 and engine `1.0.0`. Older format 1
+packages and share codes without `engineVersion` are treated as legacy engine
+`1.0.0`; their original engine cannot be independently verified. Successful
+replay returns the explicit version. Unsupported format or
+engine versions are rejected, not silently replayed with a different engine.
+Future changes affecting generated output must increment the engine version and
+either retain a compatible replay implementation or reject old assets explicitly.
+There is no automatic migration or historical-engine hosting today. Identical
+notes and MIDI are expected for the same package and engine implementation in
+the same supported runtime/environment; engine identity alone does not guarantee
+byte-for-byte output across runtime or dependency changes. Keep the saved JSON
+note snapshot or MIDI if the historical output must remain available.
+
+Share codes are deterministic URL-safe encodings (deflate + base64url) of the
+format version, engine version, seed and effective configuration; decoding
+regenerates notes and statistics. Encoded JSON is limited to 1,048,576 bytes and
+the resulting code to 262,144 characters; sharing returns 400 if either limit is
+exceeded. Codes do not contain the note snapshot. Nothing is stored server-side. Existing
 `POST /api/generate` behavior is unchanged; statistics only gained fields.
 
 For example, one entry in the progression response is:
@@ -184,8 +207,9 @@ are not used for custom sections.
 
 Specify `seed` as a signed 32-bit integer to reproduce the same MIDI from the
 same settings and engine version, including when progression is random. Save
-both the seed and settings to recall a pattern; when omitted, the seed is not
-returned. Optional MIDI and humanization controls are `channel` (0–15, default
+both the seed and settings to recall a pattern; when omitted, the generated seed
+is returned in the `X-Generation-Seed` header and in JSON responses. Optional
+MIDI and humanization controls are `channel` (0–15, default
 0), `velocity` (1–127, default 100), `velocityVariation` (0–127, default 0),
 `timingVariation` (0–30 ticks, default 0), `swing` (0–0.5 of an eighth note,
 default 0), and `accentDownbeats` (boolean, default false). Omit them or use

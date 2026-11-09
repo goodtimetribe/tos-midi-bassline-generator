@@ -1,6 +1,7 @@
 using BasslineGenerator.Api.Models;
 using BasslineGenerator.Interfaces;
 using BasslineGenerator.MusicTheory;
+using BasslineGenerator.Packaging;
 using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
@@ -11,6 +12,16 @@ public sealed class GenerateRequestSchemaFilter(IEnumerable<IPreset> presets) : 
 {
     public void Apply(OpenApiSchema schema, SchemaFilterContext context)
     {
+        if (context.Type == typeof(GenerationPackage))
+        {
+            schema.Properties["version"].Description = "Package format version; currently 1.";
+            schema.Properties["engineVersion"].Description = "Generator compatibility version. Missing means legacy engine 1.0.0; unsupported versions cannot be replayed.";
+            schema.Properties["seed"].Description = "Seed used for generation; must match effectiveConfiguration.seed.";
+            schema.Properties["effectiveConfiguration"].Description = "Replay inputs; per-section behavior is authoritative.";
+            schema.Properties["notes"].Description = "Derived note snapshot; ignored and recomputed during replay.";
+            schema.Properties["statistics"].Description = "Derived statistics; ignored and recomputed during replay.";
+            return;
+        }
         if (context.Type == typeof(SectionRequest))
         {
             SetSuggestions(schema.Properties["style"], presets.Select(p => p.World.ToString()));
@@ -67,6 +78,11 @@ public sealed class GenerateExamplesFilter : IOperationFilter
 {
     public void Apply(OpenApiOperation operation, OperationFilterContext context)
     {
+        if (context.MethodInfo.Name == "PackageMidi" && context.MethodInfo.DeclaringType == typeof(Controllers.BasslineController))
+        {
+            operation.Responses["200"].Content["audio/midi"].Schema = new OpenApiSchema { Type = "string", Format = "binary" };
+            return;
+        }
         if (context.MethodInfo.Name != "Generate" || context.MethodInfo.DeclaringType != typeof(Controllers.BasslineController))
             return;
 

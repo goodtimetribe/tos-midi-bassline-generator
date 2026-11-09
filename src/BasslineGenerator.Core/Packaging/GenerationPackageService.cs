@@ -13,6 +13,7 @@ public sealed class GenerationPackageService(IBassGenerator generator)
     public static GenerationPackage FromResult(GenerationResult result) =>
         new(GenerationPackage.CurrentVersion, result.Configuration.Seed, result.Configuration)
         {
+            EngineVersion = GenerationPackage.CurrentEngineVersion,
             Statistics = result.Statistics,
             Notes = result.Notes.Select(n => new NoteData(
                 NoteUtilities.NoteName(n.Pitch), n.Pitch, (double)n.Start / MusicConstants.Ppq,
@@ -23,12 +24,22 @@ public sealed class GenerationPackageService(IBassGenerator generator)
     public bool TryRegenerate(GenerationPackage? package, [NotNullWhen(true)] out GenerationPackage? regenerated)
     {
         regenerated = null;
+        if (!TryReplay(package, out var result)) return false;
+        regenerated = FromResult(result);
+        return true;
+    }
+
+    /// <summary>Replays the configuration to obtain the generated notes and MIDI.</summary>
+    public bool TryReplay(GenerationPackage? package, [NotNullWhen(true)] out GenerationResult? result)
+    {
+        result = null;
         try
         {
             if (package is not { Version: GenerationPackage.CurrentVersion, EffectiveConfiguration: { } config }
+                || (package.EngineVersion ?? GenerationPackage.LegacyEngineVersion) != GenerationPackage.CurrentEngineVersion
                 || config.Seed != package.Seed || config.Sections is null || config.Sections.Count == 0)
                 return false;
-            regenerated = Create(ToSettings(config));
+            result = generator.Generate(ToSettings(config));
             return true;
         }
         catch (Exception)
