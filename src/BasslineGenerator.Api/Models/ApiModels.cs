@@ -182,6 +182,17 @@ public sealed record ProgressionResponse(string Id, string Name, string Descript
 public sealed record GenerationResponse(GenerateRequest Request, GenerationConfiguration Configuration,
     GenerationStatistics Statistics, string Motif, string Progression, int BarCount, string MidiSha256);
 
+/// <summary>A deterministic, URL-safe encoding of a generation package.</summary>
+public sealed record ShareResponse(string ShareCode);
+
+/// <summary>A share code to decode.</summary>
+public sealed class ShareDecodeRequest
+{
+    /// <summary>URL-safe share code returned by POST /api/share.</summary>
+    [Required, MaxLength(262144)]
+    public string? ShareCode { get; set; }
+}
+
 /// <summary>A safe, human-readable error response.</summary>
 /// <param name="Error">Description of the error without the supplied input.</param>
 public sealed record ErrorResponse(string Error);

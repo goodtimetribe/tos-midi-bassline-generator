@@ -2,6 +2,7 @@ using BasslineGenerator.Api.Models;
 using BasslineGenerator.Interfaces;
 using BasslineGenerator.Models;
 using BasslineGenerator.MusicTheory;
+using BasslineGenerator.Packaging;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Cryptography;
 
@@ -13,6 +14,7 @@ public sealed class BasslineController(
     IBassGenerator generator,
     IStreamMidiExporter exporter,
     IEnumerable<IPreset> presets,
+    GenerationPackageService packages,
     ILogger<BasslineController> logger) : ControllerBase
 {
     /// <summary>Returns API health and version information.</summary>
@@ -62,14 +64,108 @@ public sealed class BasslineController(
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status429TooManyRequests, "application/json")]
     public IActionResult Generate([FromBody] GenerateRequest request)
     {
-        var preset = presets.FirstOrDefault(p => string.Equals(p.World.ToString(), request.Style?.Trim(), StringComparison.OrdinalIgnoreCase));
-        if (preset is null)
+        var settings = BuildSettings(request);
+        if (settings is null)
         {
             logger.LogWarning("Request validation failed.");
             return BadRequest(new ErrorResponse("Style must be one of the available presets."));
         }
 
-        var settings = new GeneratorSettings
+        // The result and stream are request-local; no MIDI or settings are persisted.
+        var result = generator.Generate(settings);
+        using var stream = new MemoryStream();
+        exporter.Write(result, stream);
+        var midi = stream.ToArray();
+        Response.Headers["X-Generation-Seed"] = result.Configuration.Seed.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        logger.LogInformation("Generation succeeded.");
+        if (Request.GetTypedHeaders().Accept?.Any(mediaType =>
+                mediaType.Quality.GetValueOrDefault(1) > 0
+                && string.Equals(mediaType.MediaType.Value, "application/json", StringComparison.OrdinalIgnoreCase)) == true)
+        {
+            request.Seed ??= result.Configuration.Seed;
+            return Ok(new GenerationResponse(request, result.Configuration, result.Statistics,
+                result.Motif.Name, result.Progression, result.BarCount, Convert.ToHexString(SHA256.HashData(midi))));
+        }
+        return File(midi, "audio/midi", "bassline.mid");
+    }
+
+    /// <summary>Generates a shareable, reproducible generation package as JSON.</summary>
+    /// <remarks>Accepts the same request as <c>POST /api/generate</c> and returns the seed, effective configuration, statistics and every note positioned in beats. No MIDI file is returned; nothing is stored.</remarks>
+    /// <param name="request">Musical settings for the bassline.</param>
+    /// <response code="200">The generation package.</response>
+    /// <response code="400">The request is invalid.</response>
+    /// <response code="429">The rate limit was exceeded.</response>
+    /// <response code="500">An unexpected server error occurred.</response>
+    [HttpPost("generate/package")]
+    [Consumes("application/json")]
+    [ProducesResponseType<GenerationPackage>(StatusCodes.Status200OK, "application/json")]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status400BadRequest, "application/json")]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status429TooManyRequests, "application/json")]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status500InternalServerError, "application/json")]
+    public IActionResult GeneratePackage([FromBody] GenerateRequest request)
+    {
+        var settings = BuildSettings(request);
+        if (settings is null)
+        {
+            logger.LogWarning("Request validation failed.");
+            return BadRequest(new ErrorResponse("Style must be one of the available presets."));
+        }
+        var package = packages.Create(settings);
+        Response.Headers["X-Generation-Seed"] = package.Seed.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        logger.LogInformation("Package generation succeeded.");
+        return Ok(package);
+    }
+
+    /// <summary>Replays an edited or saved generation package.</summary>
+    /// <remarks>Regenerates notes and statistics from the package's version, seed and effective configuration; any supplied notes and statistics are ignored. Per-section behavior is authoritative.</remarks>
+    /// <response code="200">The regenerated package.</response>
+    /// <response code="400">The package is invalid or has an unsupported version.</response>
+    [HttpPost("package/regenerate")]
+    [Consumes("application/json")]
+    [ProducesResponseType<GenerationPackage>(StatusCodes.Status200OK, "application/json")]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status400BadRequest, "application/json")]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status429TooManyRequests, "application/json")]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status500InternalServerError, "application/json")]
+    public IActionResult Regenerate([FromBody] GenerationPackage package) =>
+        packages.TryRegenerate(package, out var result) ? Ok(result) : InvalidPackage();
+
+    /// <summary>Creates a deterministic share code for a generation package.</summary>
+    /// <remarks>The code is a URL-safe, compressed encoding of the package's version, seed and effective configuration. It is computed on the fly; nothing is stored. Equal configurations always produce equal codes.</remarks>
+    /// <response code="200">The share code.</response>
+    /// <response code="400">The package is invalid or has an unsupported version.</response>
+    [HttpPost("share")]
+    [Consumes("application/json")]
+    [ProducesResponseType<ShareResponse>(StatusCodes.Status200OK, "application/json")]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status400BadRequest, "application/json")]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status429TooManyRequests, "application/json")]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status500InternalServerError, "application/json")]
+    public IActionResult Share([FromBody] GenerationPackage package) =>
+        packages.TryRegenerate(package, out var result) ? Ok(new ShareResponse(ShareCodec.Encode(result))) : InvalidPackage();
+
+    /// <summary>Decodes a share code into a full generation package.</summary>
+    /// <remarks>Notes and statistics are regenerated from the encoded configuration.</remarks>
+    /// <response code="200">The generation package.</response>
+    /// <response code="400">The share code is malformed or unsupported.</response>
+    [HttpPost("share/decode")]
+    [Consumes("application/json")]
+    [ProducesResponseType<GenerationPackage>(StatusCodes.Status200OK, "application/json")]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status400BadRequest, "application/json")]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status429TooManyRequests, "application/json")]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status500InternalServerError, "application/json")]
+    public IActionResult DecodeShare([FromBody] ShareDecodeRequest request) =>
+        packages.TryRegenerate(ShareCodec.Decode(request.ShareCode), out var result) ? Ok(result) : InvalidPackage();
+
+    private BadRequestObjectResult InvalidPackage()
+    {
+        logger.LogWarning("Package validation failed.");
+        return BadRequest(new ErrorResponse("Package or share code is invalid or unsupported."));
+    }
+
+    private GeneratorSettings? BuildSettings(GenerateRequest request)
+    {
+        var preset = presets.FirstOrDefault(p => string.Equals(p.World.ToString(), request.Style?.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (preset is null) return null;
+        return new GeneratorSettings
         {
             RootNote = request.RootNote!,
             ScaleType = request.ScaleType!.Trim().Equals("Natural Minor", StringComparison.OrdinalIgnoreCase)
@@ -98,21 +194,5 @@ public sealed class BasslineController(
                 ? Generation.BasslineGenerator.FullArrangement(request.Bars.Value)
                 : null
         };
-        // The result and stream are request-local; no MIDI or settings are persisted.
-        var result = generator.Generate(settings);
-        using var stream = new MemoryStream();
-        exporter.Write(result, stream);
-        var midi = stream.ToArray();
-        Response.Headers["X-Generation-Seed"] = result.Configuration.Seed.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        logger.LogInformation("Generation succeeded.");
-        if (Request.GetTypedHeaders().Accept?.Any(mediaType =>
-                mediaType.Quality.GetValueOrDefault(1) > 0
-                && string.Equals(mediaType.MediaType.Value, "application/json", StringComparison.OrdinalIgnoreCase)) == true)
-        {
-            request.Seed ??= result.Configuration.Seed;
-            return Ok(new GenerationResponse(request, result.Configuration, result.Statistics,
-                result.Motif.Name, result.Progression, result.BarCount, Convert.ToHexString(SHA256.HashData(midi))));
-        }
-        return File(midi, "audio/midi", "bassline.mid");
     }
 }

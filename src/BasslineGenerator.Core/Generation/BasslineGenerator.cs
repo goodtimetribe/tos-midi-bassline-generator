@@ -31,7 +31,7 @@ public sealed class BasslineGenerator(SectionGenerator sections, MotifGenerator 
             throw new ArgumentException("Sections must contain 1–512 bars each and 1–4096 bars in total.", nameof(settings));
         var presetMap = presets.ToDictionary(p => p.World);
         if (song.Any(s => !presetMap.ContainsKey(s.Style))) throw new ArgumentException("Unknown style.", nameof(settings));
-        foreach (var section in song) presetMap[section.Style].Dimensions.WithOverrides(settings).Validate();
+        foreach (var section in song) section.Resolve(presetMap[section.Style], settings).Validate();
         var seed = settings.Seed ?? Random.Shared.Next();
         var random = new Random(seed);
         var progression = ChordProgressionLibrary.Select(settings.Progression, settings.ScaleType, random);
@@ -47,12 +47,12 @@ public sealed class BasslineGenerator(SectionGenerator sections, MotifGenerator 
         }
         var effectiveSections = song.Select(section => new EffectiveSectionConfiguration(
             section.Name, section.Style.ToString(), section.Bars,
-            presetMap[section.Style].Dimensions.WithOverrides(settings))).ToArray();
+            section.Resolve(presetMap[section.Style], settings))).ToArray();
         var configuration = new GenerationConfiguration(
             seed, settings.RootNote, settings.ScaleType.Trim().Equals("Natural Minor", StringComparison.OrdinalIgnoreCase)
                 ? "Minor"
                 : ScaleLibrary.All.First(scaleType => scaleType.Name.Equals(settings.ScaleType, StringComparison.OrdinalIgnoreCase)).Name,
-            settings.Style.ToString(), settings.IsArrangement ? "arrangement" : settings.Sections is not null ? "custom" : "single",
+            settings.Style.ToString(), settings.Mode ?? (settings.IsArrangement ? "arrangement" : settings.Sections is not null ? "custom" : "single"),
             settings.BPM, settings.Bars, settings.Progression, progression.Id, progression.DisplayName, progression.ChordSequence,
             settings.Channel, settings.Velocity, settings.VelocityVariation, settings.TimingVariation, settings.Swing, settings.AccentDownbeats,
             settings.Movement, settings.Groove, settings.Mutation, settings.Tension, settings.Repetition, effectiveSections);

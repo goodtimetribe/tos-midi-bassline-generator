@@ -27,5 +27,7 @@ public sealed class GeneratorSettings
     /// <summary>Delay applied to offbeat eighth notes, from 0 to 0.5 of an eighth note.</summary>
     public double Swing { get; set; }
     public bool AccentDownbeats { get; set; }
+    /// <summary>Optional mode label (single, custom or arrangement) to report when replaying a package.</summary>
+    public string? Mode { get; set; }
     public IReadOnlyList<SongSection>? Sections { get; set; }
 }
