@@ -11,7 +11,7 @@ public sealed class SectionGenerator(IRhythmGenerator rhythm, BassMovementGenera
         GeneratorSettings settings, Random random, ref int previousPitch)
     {
         var notes = new List<BassNote>();
-        var dimensions = preset.Dimensions.WithOverrides(settings);
+        var dimensions = section.Resolve(preset, settings);
         dimensions.Validate();
         var pattern = CreatePattern(preset.Density, dimensions.Groove, random);
         var phrase = motif.Movements.ToArray();

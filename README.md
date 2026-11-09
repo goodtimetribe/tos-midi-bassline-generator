@@ -95,6 +95,10 @@ as the response media type before executing to download MIDI directly.
 | `GET /api/presets` | Returns `["Dreamy","Pop","Acid","Rave"]`. |
 | `GET /api/progressions` | Returns progression IDs, names, descriptions, chord sequences, moods and suggested uses. |
 | `POST /api/generate` | Returns a downloadable `bassline.mid` (`audio/midi`) by default, or effective generation metadata (`application/json`) when requested. |
+| `POST /api/generate/package` | Same request as `/api/generate`; returns a JSON generation package (no MIDI). |
+| `POST /api/package/regenerate` | Replays a saved or edited package and returns a fresh one. |
+| `POST /api/share` | Package in, `{"shareCode":"..."}` out. |
+| `POST /api/share/decode` | `{"shareCode":"..."}` in, package out. |
 
 Generation remains a MIDI download by default for existing clients. To receive a
 JSON configuration instead, send `Accept: application/json` to the same endpoint.
@@ -107,6 +111,29 @@ Its `request` object is ready to submit again with the returned seed.
 selected progression. `midiSha256` lets clients verify a replay. For
 arrangements, effective dimensions are included for every section because style
 defaults vary by section.
+
+### Generation packages and share codes
+
+A generation package is a portable, versioned JSON asset:
+`{"version":1,"seed":12345,"effectiveConfiguration":{...},"statistics":{...},"notes":[...]}`.
+`effectiveConfiguration` holds every resolved value (seed, key, scale, style,
+progression, MIDI settings and each section's behavior dimensions), so the same
+package reproduces the same bassline with the same engine version. A random
+seed is chosen when none is supplied and reported in the package.
+Each note is `{"note":"A2","midiNote":45,"startBeat":4.0,"durationBeats":0.5,"velocity":96}`
+(C4 = 60; beats are quarter notes), enough for piano-roll, timeline and density
+views without parsing MIDI. Statistics include note count, unique notes,
+lowest/highest note, average length (beats) and velocity, octave jumps, section
+count and arrangement length.
+
+To save, load, edit or clone, keep the package JSON. Edit
+`effectiveConfiguration` (per-section `behavior` values are authoritative on
+replay) and submit it to `/api/package/regenerate`; `notes` and `statistics`
+are ignored on input and recomputed. `seed` must match the configuration's seed
+and `version` must be supported. Share codes are deterministic URL-safe encodings
+(deflate + base64url) of the version and effective configuration; decoding
+regenerates notes and statistics. Nothing is stored server-side. Existing
+`POST /api/generate` behavior is unchanged; statistics only gained fields.
 
 For example, one entry in the progression response is:
 
