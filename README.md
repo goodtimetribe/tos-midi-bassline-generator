@@ -59,6 +59,32 @@ written as `--option=value`. Invalid options or values produce an error.
 
 ## HTTP API
 
+### Web application
+
+The React frontend lives in `src/BasslineGenerator.Web`. Start the API as shown
+below, then in a second terminal run:
+
+```sh
+cd src/BasslineGenerator.Web
+npm ci
+npm run dev
+```
+
+Open the Vite URL printed in the terminal. The development server proxies API
+and OpenAPI requests to `http://localhost:5080`; run the API with the development
+launch profile. The workspace generates and replays packages, displays a
+read-only piano roll, downloads MIDI, and supports local JSON package files and
+share codes. MIDI is auditioned in a DAW; the application does not play audio.
+
+Run `npm test` and `npm run build` in the frontend directory. The production
+build is a static site in `dist/`. Configure `VITE_API_BASE_URL` at build time
+to the API origin (leave it unset when the site and API share an origin), and
+allow the exact frontend origin in the API CORS configuration for cross-origin
+hosting. Root-note and scale choices follow the API's documented OpenAPI
+suggestions; keep them aligned if the API contract changes. The existing deployment workflow deploys only the
+API; publishing the static frontend requires separate hosting configuration.
+Packages are saved only when explicitly downloaded by the user.
+
 Run the API from the repository root:
 
 ```sh

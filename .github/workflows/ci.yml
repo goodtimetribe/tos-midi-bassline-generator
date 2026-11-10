@@ -16,6 +16,28 @@ permissions:
   contents: read
 
 jobs:
+  frontend:
+    name: Build and test frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/BasslineGenerator.Web
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/BasslineGenerator.Web/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Test frontend
+        run: npm test
+      - name: Build frontend
+        run: npm run build
+
   build-test-publish:
     name: Build, test, and publish
     runs-on: ubuntu-latest
