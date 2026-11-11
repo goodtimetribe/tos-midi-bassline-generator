@@ -1,5 +1,6 @@
-import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import PianoRoll from "./PianoRoll";
+import { MidiDevices } from "./midi";
 import { PlaybackTransport, type PlaybackState } from "./playback";
 import type { GenerationPackage } from "./types";
 
@@ -11,6 +12,12 @@ const Preview = forwardRef<PreviewHandle, { pkg: GenerationPackage; disabled: bo
   const [state, setState] = useState<PlaybackState>("stopped");
   const [error, setError] = useState("");
   const [storageError, setStorageError] = useState(false);
+  const [outputs, setOutputs] = useState<MIDIOutput[]>([]);
+  const [discovered, setDiscovered] = useState(false);
+  const [destination, setDestination] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const selectedOutput = useRef<MIDIOutput | null>(null);
+  const devices = useRef<MidiDevices | null>(null);
   const [volume, setVolume] = useState(() => {
     try {
       const saved = sessionStorage.getItem(volumeKey);
@@ -20,12 +27,45 @@ const Preview = forwardRef<PreviewHandle, { pkg: GenerationPackage; disabled: bo
       return 75;
     }
   });
-  const [transport] = useState(() => new PlaybackTransport(setState));
+  const [transport] = useState(() => new PlaybackTransport(setState, setError));
 
   useImperativeHandle(ref, () => ({ stop: () => transport.stop() }), [transport]);
   useEffect(() => { transport.load(pkg); }, [transport, pkg]);
   useEffect(() => () => transport.dispose(), [transport]);
   useEffect(() => { transport.setVolume(volume); }, [transport, volume]);
+  useEffect(() => {
+    const manager = new MidiDevices((available) => {
+      setOutputs(available);
+      setDiscovered(true);
+      if (selectedOutput.current && !available.includes(selectedOutput.current)) {
+        transport.setDestination(null);
+        selectedOutput.current = null;
+        setDestination("");
+        setError("The selected MIDI output disconnected or changed. Playback stopped; select an output again.");
+      }
+    });
+    devices.current = manager;
+    return () => { manager.dispose(); devices.current = null; };
+  }, [transport]);
+
+  const refreshDevices = async () => {
+    setError("");
+    setRefreshing(true);
+    try {
+      await devices.current?.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "MIDI devices could not be refreshed.");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+  const changeDestination = (id: string) => {
+    const output = outputs.find((device) => device.id === id) ?? null;
+    transport.setDestination(output);
+    selectedOutput.current = output;
+    setDestination(output?.id ?? "");
+    setError("");
+  };
 
   const changeVolume = (value: number) => {
     setVolume(value);
@@ -40,7 +80,9 @@ const Preview = forwardRef<PreviewHandle, { pkg: GenerationPackage; disabled: bo
   const start = (restart: boolean) => {
     setError("");
     void (restart ? transport.restart() : transport.play()).catch(() => {
-      setError("Audio preview could not start. Check your browser audio settings and try again.");
+      setError(selectedOutput.current
+        ? "MIDI playback could not start. Check the output device and browser permissions."
+        : "Audio preview could not start. Check your browser audio settings and try again.");
     });
   };
 
@@ -53,13 +95,23 @@ const Preview = forwardRef<PreviewHandle, { pkg: GenerationPackage; disabled: bo
         <button type="button" onClick={() => transport.stop()}>Stop</button>
         <button type="button" onClick={() => start(true)} disabled={disabled || !pkg.notes?.length}>Restart</button>
       </div>
+      <label>Output
+        <select value={destination} onChange={(event) => changeDestination(event.target.value)} aria-label="Playback output">
+          <option value="">Browser Synth</option>
+          {outputs.map((output) => <option key={output.id} value={output.id}>{output.name || "Unnamed MIDI output"}</option>)}
+        </select>
+      </label>
+      <button type="button" onClick={() => void refreshDevices()} disabled={refreshing}>
+        {refreshing ? "Refreshing..." : "Refresh Devices"}
+      </button>
       <label className="volume">Volume <span>{volume}%</span>
         <input type="range" min="0" max="100" value={volume} aria-label="Master volume" aria-valuetext={`${volume}%`}
-          onChange={(event) => changeVolume(Number(event.target.value))} />
+          disabled={!!destination} onChange={(event) => changeVolume(Number(event.target.value))} />
       </label>
       <p className="transport-state" role="status">{state === "playing" ? "Playing" : state === "paused" ? "Paused" : "Stopped"}</p>
     </div>
     {error && <p className="error" role="alert">{error}</p>}
+    {discovered && outputs.length === 0 && <p className="hint" role="status">No MIDI outputs found. Connect a device or virtual port and refresh.</p>}
     {storageError && <p className="warning" role="alert">Volume could not be saved for this browser session.</p>}
     <PianoRoll pkg={pkg} transport={transport} playbackState={state} />
   </section>;

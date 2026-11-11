@@ -1,4 +1,5 @@
 import type { GenerationPackage, NoteData } from "./types";
+import { MidiInstrument } from "./midi";
 
 export type PlaybackState = "stopped" | "playing" | "paused";
 
@@ -61,9 +62,17 @@ export class PlaybackTransport {
   private timer: ReturnType<typeof setInterval> | null = null;
   private revision = 0;
   private volume = 75;
+  private midiOutput: MIDIOutput | null = null;
   state: PlaybackState = "stopped";
 
-  constructor(private onStateChange: (state: PlaybackState) => void) {}
+  constructor(private onStateChange: (state: PlaybackState) => void, private onError: (message: string) => void = () => {}) {}
+
+  setDestination(output: MIDIOutput | null) {
+    if (this.midiOutput === output) return;
+    this.stop();
+    this.midiOutput = output;
+    this.instrument = null;
+  }
 
   load(pkg: GenerationPackage) {
     this.stop();
@@ -98,20 +107,30 @@ export class PlaybackTransport {
       this.output = this.context.createGain();
       this.output.gain.value = this.volume / 100;
       this.output.connect(this.context.destination);
-      this.instrument = new BassInstrument(this.context, this.output);
     }
     await this.context.resume();
     if (revision !== this.revision) return;
+    if (this.midiOutput && this.midiOutput.state !== "connected") {
+      throw new Error("MIDI output disconnected.");
+    }
+    this.instrument = this.midiOutput
+      ? new MidiInstrument(this.midiOutput, this.context)
+      : new BassInstrument(this.context, this.output!);
     this.startedAt = this.context.currentTime;
     this.nextNote = 0;
-    while (this.nextNote < this.notes.length && this.notes[this.nextNote].startBeat * this.secondsPerBeat < this.offset) {
-      const note = this.notes[this.nextNote++];
-      const remaining = (note.startBeat + note.durationBeats) * this.secondsPerBeat - this.offset;
-      if (remaining > 0) this.instrument!.play(note, this.startedAt, remaining);
+    try {
+      while (this.nextNote < this.notes.length && this.notes[this.nextNote].startBeat * this.secondsPerBeat < this.offset) {
+        const note = this.notes[this.nextNote++];
+        const remaining = (note.startBeat + note.durationBeats) * this.secondsPerBeat - this.offset;
+        if (remaining > 0) this.instrument.play(note, this.startedAt, remaining);
+      }
+      this.setState("playing");
+      this.timer = setInterval(() => this.schedule(), 25);
+      this.schedule();
+    } catch (error) {
+      this.stop();
+      throw error;
     }
-    this.setState("playing");
-    this.schedule();
-    this.timer = setInterval(() => this.schedule(), 25);
   }
 
   pause() {
@@ -145,7 +164,13 @@ export class PlaybackTransport {
     ++this.revision;
     if (this.timer !== null) clearInterval(this.timer);
     this.timer = null;
-    this.instrument?.silence();
+    try {
+      this.instrument?.silence();
+    } catch {
+      this.onError(this.midiOutput
+        ? "MIDI output could not be silenced. Check the device connection."
+        : "Audio preview could not be silenced.");
+    }
   }
 
   private setState(state: PlaybackState) {
@@ -155,6 +180,18 @@ export class PlaybackTransport {
 
   private schedule() {
     if (!this.context || !this.instrument || this.state !== "playing") return;
+    try {
+      this.scheduleNotes();
+    } catch {
+      this.stop();
+      this.onError(this.midiOutput
+        ? "MIDI playback failed. Check the output device and try again."
+        : "Audio preview failed. Check your browser audio settings and try again.");
+    }
+  }
+
+  private scheduleNotes() {
+    if (!this.context || !this.instrument) return;
     const position = this.position();
     if (position >= this.duration) {
       this.stop();

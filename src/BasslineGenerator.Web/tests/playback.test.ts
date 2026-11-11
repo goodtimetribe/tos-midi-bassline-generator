@@ -39,6 +39,14 @@ class AudioContextMock {
   createOscillator() { const oscillator = new Oscillator(); this.oscillators.push(oscillator); return oscillator; }
 }
 
+class MidiOutputMock {
+  id = "device";
+  name = "Circuit Tracks";
+  state: MIDIPortDeviceState = "connected";
+  send = vi.fn();
+  clear = vi.fn();
+}
+
 const pkg: GenerationPackage = {
   version: 1, seed: 1, statistics: null,
   effectiveConfiguration: {
@@ -149,6 +157,73 @@ describe("preview transport", () => {
     transport.stop();
     expect(context.gains[2].disconnect).toHaveBeenCalled();
     expect(context.oscillators[1].stop).toHaveBeenLastCalledWith();
+    transport.dispose();
+  });
+
+  it("routes notes and velocity to MIDI, and cancels and resumes sustained notes at the transport position", async () => {
+    const output = new MidiOutputMock();
+    const transport = new PlaybackTransport(() => {});
+    transport.load(pkg);
+    transport.setDestination(output as unknown as MIDIOutput);
+    await transport.play();
+    const context = AudioContextMock.instance;
+    expect(context.oscillators).toHaveLength(0);
+    expect(output.send).toHaveBeenNthCalledWith(1, [0x90, 33, 64], 0);
+    expect(output.send).toHaveBeenNthCalledWith(2, [0x80, 33, 0], 1000);
+    context.currentTime = 0.25;
+    transport.pause();
+    expect(transport.beat).toBe(0.5);
+    expect(output.clear).toHaveBeenCalledTimes(1);
+    expect(output.send).toHaveBeenLastCalledWith([0x80, 33, 0]);
+    context.currentTime = 1;
+    await transport.play();
+    expect(output.send).toHaveBeenLastCalledWith([0x80, 33, 0], 750);
+    context.currentTime = 2.65;
+    vi.advanceTimersByTime(25);
+    expect(output.send.mock.calls[5][0]).toEqual([0x90, 36, 127]);
+    expect(output.send.mock.calls[5][1]).toBeCloseTo(125);
+    expect(output.send.mock.calls[6][0]).toEqual([0x80, 36, 0]);
+    expect(output.send.mock.calls[6][1]).toBeCloseTo(625);
+    transport.stop();
+    expect(output.clear).toHaveBeenCalledTimes(2);
+    expect(transport.beat).toBe(0);
+    await transport.restart();
+    expect(output.send).toHaveBeenCalledWith([0x90, 33, 64], 25);
+    transport.dispose();
+  });
+
+  it("stops and silences the old output when switching destinations", async () => {
+    const output = new MidiOutputMock();
+    const transport = new PlaybackTransport(() => {});
+    transport.load(pkg);
+    await transport.play();
+    const context = AudioContextMock.instance;
+    transport.setDestination(output as unknown as MIDIOutput);
+    expect(transport.state).toBe("stopped");
+    expect(context.gains[1].disconnect).toHaveBeenCalled();
+    await transport.play();
+    transport.setDestination(null);
+    expect(output.clear).toHaveBeenCalled();
+    expect(output.send).toHaveBeenLastCalledWith([0x80, 33, 0]);
+    await transport.play();
+    expect(context.oscillators).toHaveLength(2);
+    transport.dispose();
+  });
+
+  it("stops and reports MIDI failures without leaving a running timer", async () => {
+    const output = new MidiOutputMock();
+    const errors = vi.fn();
+    const transport = new PlaybackTransport(() => {}, errors);
+    transport.load(pkg);
+    transport.setDestination(output as unknown as MIDIOutput);
+    await transport.play();
+    output.state = "disconnected";
+    AudioContextMock.instance.currentTime = 1.9;
+    vi.advanceTimersByTime(25);
+    expect(transport.state).toBe("stopped");
+    expect(errors).toHaveBeenCalledWith(expect.stringContaining("MIDI playback failed"));
+    expect(vi.getTimerCount()).toBe(0);
+    await expect(transport.play()).rejects.toThrow("disconnected");
     transport.dispose();
   });
 });
