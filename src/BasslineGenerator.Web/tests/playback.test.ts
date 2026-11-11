@@ -192,6 +192,54 @@ describe("preview transport", () => {
     transport.dispose();
   });
 
+  it("switches MIDI channels without restarting and silences notes on their original channels", async () => {
+    const output = new MidiOutputMock();
+    const transport = new PlaybackTransport(() => {});
+    transport.load(pkg);
+    transport.setDestination(output as unknown as MIDIOutput);
+    await transport.play();
+    expect(output.send).toHaveBeenNthCalledWith(1, [0x90, 33, 64], 0);
+    expect(output.send).toHaveBeenNthCalledWith(2, [0x80, 33, 0], 1000);
+
+    transport.setMidiChannel(1);
+    expect(transport.state).toBe("playing");
+    AudioContextMock.instance.currentTime = 1.9;
+    vi.advanceTimersByTime(25);
+    expect(output.send.mock.calls[2][0]).toEqual([0x91, 36, 127]);
+    expect(output.send.mock.calls[3][0]).toEqual([0x81, 36, 0]);
+
+    transport.stop();
+    expect(output.send).toHaveBeenCalledWith([0x80, 33, 0]);
+    expect(output.send).toHaveBeenCalledWith([0x81, 36, 0]);
+    await transport.play();
+    expect(output.send).toHaveBeenCalledWith([0x91, 33, 64], 25);
+    expect(output.send).toHaveBeenCalledWith([0x81, 33, 0], 1025);
+    transport.dispose();
+  });
+
+  it("encodes channel 16 and leaves browser synth playback unaffected", async () => {
+    const output = new MidiOutputMock();
+    const transport = new PlaybackTransport(() => {});
+    transport.load(pkg);
+    transport.setMidiChannel(15);
+    await transport.play();
+    const context = AudioContextMock.instance;
+    expect(context.oscillators).toHaveLength(1);
+    expect(output.send).not.toHaveBeenCalled();
+    transport.setMidiChannel(1);
+    expect(transport.state).toBe("playing");
+    expect(context.gains[1].disconnect).not.toHaveBeenCalled();
+    transport.setDestination(output as unknown as MIDIOutput);
+    transport.setMidiChannel(15);
+    await transport.play();
+    expect(output.send).toHaveBeenCalledWith([0x9f, 33, 64], 0);
+    expect(output.send).toHaveBeenCalledWith([0x8f, 33, 0], 1000);
+    expect(() => transport.setMidiChannel(16)).toThrow(RangeError);
+    expect(() => transport.setMidiChannel(-1)).toThrow(RangeError);
+    expect(() => transport.setMidiChannel(1.5)).toThrow(RangeError);
+    transport.dispose();
+  });
+
   it("stops and silences the old output when switching destinations", async () => {
     const output = new MidiOutputMock();
     const transport = new PlaybackTransport(() => {});

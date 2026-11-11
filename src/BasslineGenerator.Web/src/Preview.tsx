@@ -7,11 +7,13 @@ import type { GenerationPackage } from "./types";
 export interface PreviewHandle { stop(): void }
 
 const volumeKey = "bassline-preview-volume";
+const channelKey = "bassline-preview-midi-channel";
 
 const Preview = forwardRef<PreviewHandle, { pkg: GenerationPackage; disabled: boolean }>(function Preview({ pkg, disabled }, ref) {
   const [state, setState] = useState<PlaybackState>("stopped");
   const [error, setError] = useState("");
   const [storageError, setStorageError] = useState(false);
+  const [channelStorageError, setChannelStorageError] = useState(false);
   const [outputs, setOutputs] = useState<MIDIOutput[]>([]);
   const [discovered, setDiscovered] = useState(false);
   const [destination, setDestination] = useState("");
@@ -27,7 +29,20 @@ const Preview = forwardRef<PreviewHandle, { pkg: GenerationPackage; disabled: bo
       return 75;
     }
   });
-  const [transport] = useState(() => new PlaybackTransport(setState, setError));
+  const [channel, setChannel] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem(channelKey);
+      const value = saved === null ? 0 : Number(saved);
+      return saved !== "" && Number.isInteger(value) && value >= 0 && value <= 15 ? value : 0;
+    } catch {
+      return 0;
+    }
+  });
+  const [transport] = useState(() => {
+    const instance = new PlaybackTransport(setState, setError);
+    instance.setMidiChannel(channel);
+    return instance;
+  });
 
   useImperativeHandle(ref, () => ({ stop: () => transport.stop() }), [transport]);
   useEffect(() => { transport.load(pkg); }, [transport, pkg]);
@@ -77,6 +92,16 @@ const Preview = forwardRef<PreviewHandle, { pkg: GenerationPackage; disabled: bo
       setStorageError(true);
     }
   };
+  const changeChannel = (value: number) => {
+    transport.setMidiChannel(value);
+    setChannel(value);
+    try {
+      sessionStorage.setItem(channelKey, String(value));
+      setChannelStorageError(false);
+    } catch {
+      setChannelStorageError(true);
+    }
+  };
   const start = (restart: boolean) => {
     setError("");
     void (restart ? transport.restart() : transport.play()).catch(() => {
@@ -101,6 +126,11 @@ const Preview = forwardRef<PreviewHandle, { pkg: GenerationPackage; disabled: bo
           {outputs.map((output) => <option key={output.id} value={output.id}>{output.name || "Unnamed MIDI output"}</option>)}
         </select>
       </label>
+      {destination && <label>MIDI Channel
+        <select value={channel} onChange={(event) => changeChannel(Number(event.target.value))}>
+          {Array.from({ length: 16 }, (_, index) => <option key={index} value={index}>{index + 1}</option>)}
+        </select>
+      </label>}
       <button type="button" onClick={() => void refreshDevices()} disabled={refreshing}>
         {refreshing ? "Refreshing..." : "Refresh Devices"}
       </button>
@@ -113,6 +143,7 @@ const Preview = forwardRef<PreviewHandle, { pkg: GenerationPackage; disabled: bo
     {error && <p className="error" role="alert">{error}</p>}
     {discovered && outputs.length === 0 && <p className="hint" role="status">No MIDI outputs found. Connect a device or virtual port and refresh.</p>}
     {storageError && <p className="warning" role="alert">Volume could not be saved for this browser session.</p>}
+    {channelStorageError && <p className="warning" role="alert">MIDI channel could not be saved for this browser session.</p>}
     <PianoRoll pkg={pkg} transport={transport} playbackState={state} />
   </section>;
 });

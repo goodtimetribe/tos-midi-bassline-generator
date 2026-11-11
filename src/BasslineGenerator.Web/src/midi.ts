@@ -43,21 +43,29 @@ export class MidiDevices {
 }
 
 export class MidiInstrument implements PreviewInstrument {
-  private pitches = new Set<number>();
+  private pitches = new Map<number, Set<number>>();
 
-  constructor(private output: MIDIOutput, private context: AudioContext) {}
+  constructor(private output: MIDIOutput, private context: AudioContext, private channel = 0) {}
+
+  setChannel(channel: number) {
+    this.channel = channel;
+  }
 
   play(note: NoteData, start: number, duration: number) {
     if (this.output.state !== "connected") throw new Error("MIDI output disconnected.");
     const timestamp = performance.now() + Math.max(0, start - this.context.currentTime) * 1000;
-    this.pitches.add(note.midiNote);
-    this.output.send([0x90, note.midiNote, note.velocity], timestamp);
-    this.output.send([0x80, note.midiNote, 0], timestamp + duration * 1000);
+    const channel = this.channel;
+    if (!this.pitches.has(channel)) this.pitches.set(channel, new Set());
+    this.pitches.get(channel)!.add(note.midiNote);
+    this.output.send([0x90 | channel, note.midiNote, note.velocity], timestamp);
+    this.output.send([0x80 | channel, note.midiNote, 0], timestamp + duration * 1000);
   }
 
   silence() {
     this.output.clear();
-    for (const pitch of this.pitches) this.output.send([0x80, pitch, 0]);
+    for (const [channel, pitches] of this.pitches) {
+      for (const pitch of pitches) this.output.send([0x80 | channel, pitch, 0]);
+    }
     this.pitches.clear();
   }
 }
