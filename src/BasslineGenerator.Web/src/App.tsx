@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { api, download } from "./api";
 import { initialRequest, isPackage, needsRebuild, replayWithRequest, requestFromPackage, roots, scales } from "./domain";
-import PianoRoll from "./PianoRoll";
+import Preview, { type PreviewHandle } from "./Preview";
 import Modal from "./Modal";
 import { dimensions, type Dimension, type GenerateRequest, type GenerationPackage, type Progression } from "./types";
 
@@ -27,6 +27,7 @@ export default function App() {
   const [loadOpen, setLoadOpen] = useState(false);
   const [sectionIndex, setSectionIndex] = useState(0);
   const fileInput = useRef<HTMLInputElement>(null);
+  const preview = useRef<PreviewHandle>(null);
   const initialFragmentHandled = useRef(false);
   const busyRef = useRef(false);
 
@@ -49,6 +50,7 @@ export default function App() {
 
   const accept = useCallback((pkg: GenerationPackage, source: string) => {
     if (!isPackage(pkg)) throw new Error("The API returned an invalid package.");
+    preview.current?.stop();
     setResult(pkg); setDraftPackage(structuredClone(pkg)); setRequest(requestFromPackage(pkg));
     setDirty(false); setResetDefaults(false); setSaved(false); setSectionIndex(0); setSharedCode("");
     setStatus(source); setError("");
@@ -110,6 +112,7 @@ export default function App() {
     const rebuild = result && (resetDefaults || needsRebuild(result, request));
     if (rebuild && !window.confirm("This change rebuilds the arrangement using style defaults and may discard per-section behavior edits. Continue?")) return;
     if (result && !saved && !window.confirm("This replaces your unsaved result. Save it first if you want to keep it. Continue?")) return;
+    preview.current?.stop();
     void run("Generating bassline", async () => {
       const submitted = result && request.seed === null
         ? { ...request, seed: crypto.getRandomValues(new Int32Array(1))[0] }
@@ -275,7 +278,7 @@ export default function App() {
         </fieldset>
       </form>
       <div className="result">
-        {!result ? <section className="empty card"><p className="eyebrow">YOUR NEXT IDEA STARTS HERE</p><h2>Make room for the low end.</h2><p>Choose your settings and generate a bassline. Inspect the notes, then take the MIDI into your DAW.</p></section> : <>
+        {!result ? <section className="empty card"><p className="eyebrow">YOUR NEXT IDEA STARTS HERE</p><h2>Make room for the low end.</h2><p>Choose your settings and generate a bassline. Listen to the preview, then take the MIDI into your DAW.</p></section> : <>
           <section className="card result-header"><div><p className="eyebrow">GENERATED BASSLINE</p>
             <h2>{result.effectiveConfiguration.rootNote} {result.effectiveConfiguration.scaleType}</h2>
             <p>{result.effectiveConfiguration.bpm} BPM · {result.statistics?.arrangementBars ?? "—"} bars · {result.effectiveConfiguration.progressionName}</p>
@@ -283,7 +286,7 @@ export default function App() {
             <div className="actions"><button type="button" disabled={!!busy} onClick={save}>Save package</button><button type="button" disabled={!!busy} onClick={share}>Share</button><button type="button" className="primary" disabled={!!busy} onClick={renderMidi}>Download MIDI</button></div>
           </section>
           {dirty && <p className="warning">Settings changed. The visualization, save, share, and MIDI actions use the previous result. Regenerate to apply changes.</p>}
-          <PianoRoll pkg={result} />
+          <Preview ref={preview} pkg={result} disabled={busy === "Generating bassline"} />
           <section className="card"><p className="eyebrow">THE DETAILS</p><h2>Package overview</h2>
             <div className="stats"><div><strong>{result.statistics?.noteCount ?? "—"}</strong><span>Notes</span></div><div><strong>{result.statistics?.uniqueNotes ?? "—"}</strong><span>Unique pitches</span></div><div><strong>{result.statistics?.lowestNote ?? "—"}–{result.statistics?.highestNote ?? "—"}</strong><span>Range</span></div><div><strong>{result.statistics?.averageVelocity ?? "—"}</strong><span>Avg. velocity</span></div><div><strong>{result.statistics?.averageNoteLengthBeats ?? "—"}</strong><span>Avg. beats</span></div></div>
             <p>Progression: {result.effectiveConfiguration.chordSequence.join(" · ")}</p>

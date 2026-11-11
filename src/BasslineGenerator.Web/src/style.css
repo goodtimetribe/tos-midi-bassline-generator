@@ -50,6 +50,13 @@ summary { cursor: pointer; font-weight: 700; }
 .notice { background: #203c38; color: #b7f4df; }
 .warning { background: #433922; color: #ffdfa3; margin: 0; }
 .error { background: #4a272f; color: #ffced2; }
+.transport { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid #35445a; }
+.transport-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.volume { flex: 1 1 150px; max-width: 240px; margin: 0; }
+.volume span { color: #e6ecf5; }
+.transport-state { color: #aab9ca; font-size: .8rem; }
+.roll-canvas { position: relative; }
+.playhead { position: absolute; top: 26px; bottom: 1px; width: 2px; background: #ffe294; pointer-events: none; }
 .roll canvas { display: block; width: 100%; border: 1px solid #34445a; border-radius: 6px; }
 .sections { display: flex; gap: 6px; overflow-x: auto; margin: 14px 0; }
 .sections button { white-space: nowrap; font-size: .8rem; }
