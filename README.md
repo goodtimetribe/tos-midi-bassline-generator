@@ -73,8 +73,19 @@ npm run dev
 Open the Vite URL printed in the terminal. The development server proxies API
 and OpenAPI requests to `http://localhost:5080`; run the API with the development
 launch profile. The workspace generates and replays packages, displays a
-read-only piano roll, downloads MIDI, and supports local JSON package files and
-share codes. MIDI is auditioned in a DAW; the application does not play audio.
+read-only piano roll, previews the generated notes, downloads MIDI, and supports
+local JSON package files and share codes. The preview uses a lightweight Web
+Audio synthesized bass rather than MIDI-file playback or downloaded samples; it
+may sound different from a DAW. Play, pause, stop, and restart control the
+preview, and master volume is remembered for the current browser session.
+Draft changes take effect after regeneration, which stops and resets playback.
+
+The preview transport schedules package notes against the Web Audio clock with a
+short look-ahead; its instrument is separate from the transport to allow future
+outputs and instruments. Web Audio avoids Tone.js's extra dependency for this
+small synth, while MIDI playback libraries would add an unnecessary MIDI-file
+parsing step. Browser background-tab timer throttling may interrupt preview;
+keep the tab visible for reliable playback.
 
 Run `npm test` and `npm run build` in the frontend directory. The production
 build is a static site in `dist/`. Configure `VITE_API_BASE_URL` at build time

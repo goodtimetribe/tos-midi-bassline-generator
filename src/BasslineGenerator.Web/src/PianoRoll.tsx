@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import type { PlaybackState, PlaybackTransport } from "./playback";
 import type { GenerationPackage, NoteData } from "./types";
 
-interface Props { pkg: GenerationPackage }
+interface Props { pkg: GenerationPackage; transport: PlaybackTransport; playbackState: PlaybackState }
 
-export default function PianoRoll({ pkg }: Props) {
+export default function PianoRoll({ pkg, transport, playbackState }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const playhead = useRef<HTMLDivElement>(null);
   const [startBar, setStartBar] = useState(0);
   const [barsVisible, setBarsVisible] = useState(8);
   const [selected, setSelected] = useState<NoteData | null>(null);
@@ -17,6 +19,26 @@ export default function PianoRoll({ pkg }: Props) {
   const high = notes.length ? Math.min(127, notes.reduce((a, n) => Math.max(a, n.midiNote), 0) + 1) : 48;
 
   useEffect(() => { setStartBar(0); setSelected(null); }, [pkg]);
+  useEffect(() => {
+    if (playbackState === "stopped") setStartBar(0);
+  }, [playbackState]);
+  useEffect(() => {
+    let frame = 0;
+    const update = () => {
+      const beat = transport.beat;
+      const relative = (beat - start * 4) / (barsVisible * 4);
+      if (playhead.current) {
+        playhead.current.style.display = relative >= 0 && relative <= 1 ? "block" : "none";
+        playhead.current.style.left = `calc(52px + ${relative * 100}% - ${relative * 52}px)`;
+      }
+      if (playbackState === "playing") {
+        if (relative >= 1 || relative < 0) setStartBar(Math.floor(beat / (barsVisible * 4)) * barsVisible);
+        frame = requestAnimationFrame(update);
+      }
+    };
+    update();
+    return () => cancelAnimationFrame(frame);
+  }, [transport, playbackState, start, barsVisible]);
   useEffect(() => {
     const element = canvas.current;
     if (!element) return;
@@ -66,7 +88,7 @@ export default function PianoRoll({ pkg }: Props) {
   }, [notes, low, high, start, barsVisible, totalBars]);
 
   const visibleNotes = notes.filter((n) => n.startBeat + n.durationBeats > start * 4 && n.startBeat < (start + barsVisible) * 4);
-  return <section className="card roll">
+  return <section className="roll">
     <div className="section-title"><div><p className="eyebrow">NOTE VIEW</p><h2>Piano roll</h2></div>
       <div className="inline"><label>Bars shown <select value={barsVisible} onChange={(e) => setBarsVisible(Number(e.target.value))}>
         {[4, 8, 16, 32, 64].map((n) => <option key={n}>{n}</option>)}
@@ -80,7 +102,10 @@ export default function PianoRoll({ pkg }: Props) {
         </button>;
       })}
     </div>
-    <canvas ref={canvas} aria-hidden="true" />
+    <div className="roll-canvas">
+      <canvas ref={canvas} aria-hidden="true" />
+      <div ref={playhead} className="playhead" aria-hidden="true" />
+    </div>
     <div className="roll-nav">
       <button type="button" onClick={() => setStartBar(Math.max(0, start - barsVisible))} disabled={start === 0}>Previous</button>
       <label>Start bar <input type="number" min={1} max={maxStart + 1} value={start + 1}
@@ -88,7 +113,7 @@ export default function PianoRoll({ pkg }: Props) {
       <span>Bars {start + 1}–{Math.min(totalBars, start + barsVisible)} of {totalBars}</span>
       <button type="button" onClick={() => setStartBar(Math.min(maxStart, start + barsVisible))} disabled={start >= maxStart}>Next</button>
     </div>
-    <p className="hint">Notes are read-only. Brighter notes have higher velocity. Download MIDI to audition in your DAW.</p>
+    <p className="hint">Notes are read-only. Brighter notes have higher velocity. The preview instrument may sound different from your DAW.</p>
     <details><summary>Visible notes ({visibleNotes.length})</summary>
       <div className="note-list"><table><thead><tr><th>Note</th><th>Start beat</th><th>Length</th><th>Velocity</th></tr></thead>
         <tbody>{visibleNotes.map((n, i) => <tr key={i} onClick={() => setSelected(n)}>
