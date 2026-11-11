@@ -83,8 +83,11 @@ Draft changes take effect after regeneration, which stops and resets playback.
 To play through a MIDI device or virtual port, connect it, select **Refresh
 Devices**, grant browser MIDI permission, and choose it under **Output**.
 Web MIDI requires a compatible browser and a secure context (HTTPS or
-localhost). Configure the receiving device or DAW to listen on MIDI channel 1;
-the synth volume control does not affect MIDI velocity. Changing outputs or
+localhost). Select **MIDI Channel** (1-16) to match the receiving device or
+DAW; the selection is remembered for the current browser session and does not
+change the generated bassline or exported MIDI. Changing channels does not stop
+playback; already scheduled notes finish on their original channel. The synth
+volume control does not affect MIDI velocity. Changing outputs or
 disconnecting the selected device stops playback. Select **Browser Synth** to
 return to the built-in sound.
 

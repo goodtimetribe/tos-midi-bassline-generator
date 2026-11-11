@@ -63,6 +63,7 @@ export class PlaybackTransport {
   private revision = 0;
   private volume = 75;
   private midiOutput: MIDIOutput | null = null;
+  private midiChannel = 0;
   state: PlaybackState = "stopped";
 
   constructor(private onStateChange: (state: PlaybackState) => void, private onError: (message: string) => void = () => {}) {}
@@ -72,6 +73,12 @@ export class PlaybackTransport {
     this.stop();
     this.midiOutput = output;
     this.instrument = null;
+  }
+
+  setMidiChannel(channel: number) {
+    if (!Number.isInteger(channel) || channel < 0 || channel > 15) throw new RangeError("MIDI channel must be between 0 and 15.");
+    this.midiChannel = channel;
+    if (this.instrument instanceof MidiInstrument) this.instrument.setChannel(channel);
   }
 
   load(pkg: GenerationPackage) {
@@ -114,7 +121,7 @@ export class PlaybackTransport {
       throw new Error("MIDI output disconnected.");
     }
     this.instrument = this.midiOutput
-      ? new MidiInstrument(this.midiOutput, this.context)
+      ? new MidiInstrument(this.midiOutput, this.context, this.midiChannel)
       : new BassInstrument(this.context, this.output!);
     this.startedAt = this.context.currentTime;
     this.nextNote = 0;
