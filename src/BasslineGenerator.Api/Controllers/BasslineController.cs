@@ -1,8 +1,11 @@
 using BasslineGenerator.Api.Models;
+using BasslineGenerator.Export;
+using BasslineGenerator.Generation;
 using BasslineGenerator.Interfaces;
 using BasslineGenerator.Models;
 using BasslineGenerator.MusicTheory;
 using BasslineGenerator.Packaging;
+using Melanchall.DryWetMidi.Core;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Cryptography;
 
@@ -12,11 +15,15 @@ namespace BasslineGenerator.Api.Controllers;
 [Route("api")]
 public sealed class BasslineController(
     IBassGenerator generator,
+    ChordGenerator chords,
+    MidiFileFactory midiFiles,
     IStreamMidiExporter exporter,
     IEnumerable<IPreset> presets,
     GenerationPackageService packages,
     ILogger<BasslineController> logger) : ControllerBase
 {
+    private const int ChordChannel = 1;
+
     /// <summary>Returns API health and version information.</summary>
     /// <response code="200">The API is healthy.</response>
     /// <response code="429">The rate limit was exceeded.</response>
@@ -147,6 +154,30 @@ public sealed class BasslineController(
         using var stream = new MemoryStream();
         exporter.Write(result, stream);
         return File(stream.ToArray(), "audio/midi", "bassline.mid");
+    }
+
+    /// <summary>Downloads bass and sustained chord MIDI replayed from a saved or edited generation package.</summary>
+    /// <remarks>Uses the same replay as package regeneration, then derives root-position triads from the resolved progression. The bass uses its package channel and chords use MIDI channel 2. Supplied notes and statistics are ignored; the format and engine versions must be supported.</remarks>
+    /// <response code="200">The combined Type 1 MIDI file.</response>
+    /// <response code="400">The package is invalid or has an unsupported version.</response>
+    /// <response code="429">The rate limit was exceeded.</response>
+    /// <response code="500">An unexpected server error occurred.</response>
+    [HttpPost("package/combined-midi")]
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(byte[]), StatusCodes.Status200OK, "audio/midi")]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status400BadRequest, "application/json")]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status429TooManyRequests, "application/json")]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status500InternalServerError, "application/json")]
+    public IActionResult PackageCombinedMidi([FromBody] GenerationPackage package)
+    {
+        if (!packages.TryReplay(package, out var result)) return InvalidPackage();
+        var progression = ChordProgressionLibrary.Find(result.Configuration.ProgressionId);
+        if (progression is null) return InvalidPackage();
+        var chordNotes = chords.Generate(result.Configuration.RootNote, progression, result.Sections);
+        var midi = midiFiles.Create(result.Notes, result.Configuration.Channel, chordNotes, ChordChannel, result.Configuration.BPM, result.BarCount);
+        using var stream = new MemoryStream();
+        midi.Write(stream, MidiFileFormat.MultiTrack);
+        return File(stream.ToArray(), "audio/midi", "bassline-and-chords.mid");
     }
 
     /// <summary>Creates a deterministic share code for a generation package.</summary>
