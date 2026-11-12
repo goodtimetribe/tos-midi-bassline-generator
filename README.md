@@ -81,6 +81,10 @@ the current browser session. Preview playback is bass-only. Choose **Download
 Bass MIDI** for bass alone or **Download Bass + Chords MIDI** for a Type 1 MIDI
 file with separate bass and sustained chord tracks.
 Draft changes take effect after regeneration, which stops and resets playback.
+The bass track uses the generated bass channel; chords use MIDI channel 2.
+If both use channel 2, the workspace warns but still exports both unchanged.
+They may play on the same instrument when routed to the same MIDI destination.
+Change the bass channel and regenerate, or route the tracks separately in your DAW.
 
 To play through a MIDI device or virtual port, connect it, select **Refresh
 Devices**, grant browser MIDI permission, and choose it under **Output**.

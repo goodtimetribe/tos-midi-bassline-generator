@@ -7,6 +7,7 @@ import { dimensions, type Dimension, type GenerateRequest, type GenerationPackag
 
 type Catalogs = { presets: string[]; progressions: Progression[]; roots: string[]; scales: string[] };
 type Mode = "single" | "arrangement" | "custom";
+const chordExportChannel = 1; // Zero-based MIDI channel 2, matching the API.
 const message = (error: unknown) => error instanceof Error ? error.message : "Something went wrong.";
 
 export default function App() {
@@ -291,6 +292,9 @@ export default function App() {
             <div className="actions"><button type="button" disabled={!!busy} onClick={save}>Save package</button><button type="button" disabled={!!busy} onClick={share}>Share</button>{midiActions}</div>
           </section>
           {dirty && <p className="warning">Settings changed. The visualization, save, share, and MIDI actions use the previous result. Regenerate to apply changes.</p>}
+          {result.effectiveConfiguration.channel === chordExportChannel && <p className="warning" role="status">
+            Bass and chords both use MIDI channel 2 in the Bass + Chords export. They may play on the same instrument when routed to the same MIDI destination. Export is still available; change the bass channel and regenerate, or route the tracks separately in your DAW.
+          </p>}
           <Preview ref={preview} pkg={result} disabled={busy === "Generating bassline"} />
           <section className="card"><p className="eyebrow">THE DETAILS</p><h2>Package overview</h2>
             <div className="stats"><div><strong>{result.statistics?.noteCount ?? "—"}</strong><span>Notes</span></div><div><strong>{result.statistics?.uniqueNotes ?? "—"}</strong><span>Unique pitches</span></div><div><strong>{result.statistics?.lowestNote ?? "—"}–{result.statistics?.highestNote ?? "—"}</strong><span>Range</span></div><div><strong>{result.statistics?.averageVelocity ?? "—"}</strong><span>Avg. velocity</span></div><div><strong>{result.statistics?.averageNoteLengthBeats ?? "—"}</strong><span>Avg. beats</span></div></div>
