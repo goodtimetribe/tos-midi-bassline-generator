@@ -69,10 +69,28 @@ export class PlaybackTransport {
   constructor(private onStateChange: (state: PlaybackState) => void, private onError: (message: string) => void = () => {}) {}
 
   setDestination(output: MIDIOutput | null) {
-    if (this.midiOutput === output) return;
-    this.stop();
+    this.setRouting(output, this.midiChannel);
+  }
+
+  setRouting(output: MIDIOutput | null, channel: number) {
+    if (!Number.isInteger(channel) || channel < 0 || channel > 15) throw new RangeError("MIDI channel must be between 0 and 15.");
+    if (this.midiOutput === output && this.midiChannel === channel) return;
+    const playing = this.state === "playing";
+    if (playing) this.offset = this.position();
+    this.clearScheduled();
     this.midiOutput = output;
+    this.midiChannel = channel;
     this.instrument = null;
+    if (playing && this.context) {
+      try {
+        this.beginPlayback();
+      } catch {
+        this.clearScheduled();
+        this.setState("paused");
+        this.onError(output ? "MIDI playback failed. Check the output device and try again."
+          : "Audio preview failed. Check your browser audio settings and try again.");
+      }
+    }
   }
 
   setMidiChannel(channel: number) {
@@ -120,24 +138,30 @@ export class PlaybackTransport {
     if (this.midiOutput && this.midiOutput.state !== "connected") {
       throw new Error("MIDI output disconnected.");
     }
-    this.instrument = this.midiOutput
-      ? new MidiInstrument(this.midiOutput, this.context, this.midiChannel)
-      : new BassInstrument(this.context, this.output!);
-    this.startedAt = this.context.currentTime;
-    this.nextNote = 0;
     try {
-      while (this.nextNote < this.notes.length && this.notes[this.nextNote].startBeat * this.secondsPerBeat < this.offset) {
-        const note = this.notes[this.nextNote++];
-        const remaining = (note.startBeat + note.durationBeats) * this.secondsPerBeat - this.offset;
-        if (remaining > 0) this.instrument.play(note, this.startedAt, remaining);
-      }
-      this.setState("playing");
-      this.timer = setInterval(() => this.schedule(), 25);
-      this.schedule();
+      this.beginPlayback();
     } catch (error) {
       this.stop();
       throw error;
     }
+  }
+
+  private beginPlayback() {
+    if (!this.context || !this.output) throw new Error("Audio context is unavailable.");
+    if (this.midiOutput && this.midiOutput.state !== "connected") throw new Error("MIDI output disconnected.");
+    this.instrument = this.midiOutput
+      ? new MidiInstrument(this.midiOutput, this.context, this.midiChannel)
+      : new BassInstrument(this.context, this.output);
+    this.startedAt = this.context.currentTime;
+    this.nextNote = 0;
+    while (this.nextNote < this.notes.length && this.notes[this.nextNote].startBeat * this.secondsPerBeat < this.offset) {
+      const note = this.notes[this.nextNote++];
+      const remaining = (note.startBeat + note.durationBeats) * this.secondsPerBeat - this.offset;
+      if (remaining > 0) this.instrument.play(note, this.startedAt, remaining);
+    }
+    this.setState("playing");
+    this.timer = setInterval(() => this.schedule(), 25);
+    this.schedule();
   }
 
   pause() {
@@ -190,7 +214,7 @@ export class PlaybackTransport {
     try {
       this.scheduleNotes();
     } catch {
-      this.stop();
+      this.pause();
       this.onError(this.midiOutput
         ? "MIDI playback failed. Check the output device and try again."
         : "Audio preview failed. Check your browser audio settings and try again.");

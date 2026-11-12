@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initialRequest } from "../src/domain";
 import { PlaybackTransport } from "../src/playback";
+import { applyRouting, defaultRoutingProfiles, resolveOutput } from "../src/routingProfiles";
 import type { GenerationPackage } from "../src/types";
 
 class Parameter {
@@ -229,8 +230,7 @@ describe("preview transport", () => {
     transport.setMidiChannel(1);
     expect(transport.state).toBe("playing");
     expect(context.gains[1].disconnect).not.toHaveBeenCalled();
-    transport.setDestination(output as unknown as MIDIOutput);
-    transport.setMidiChannel(15);
+    transport.setRouting(output as unknown as MIDIOutput, 15);
     await transport.play();
     expect(output.send).toHaveBeenCalledWith([0x9f, 33, 64], 0);
     expect(output.send).toHaveBeenCalledWith([0x8f, 33, 0], 1000);
@@ -240,25 +240,67 @@ describe("preview transport", () => {
     transport.dispose();
   });
 
-  it("stops and silences the old output when switching destinations", async () => {
+  it("applies profile routing without changing position and silences the previous output", async () => {
     const output = new MidiOutputMock();
+    const midiOutput = output as unknown as MIDIOutput;
+    const transport = new PlaybackTransport(() => {});
+    const snapshot = structuredClone(pkg);
+    transport.load(pkg);
+    await transport.play();
+    const context = AudioContextMock.instance;
+    context.currentTime = 0.25;
+    const profile = defaultRoutingProfiles().profiles[2];
+    applyRouting(transport, profile.routing, resolveOutput(profile.routing.destination, [midiOutput]));
+    expect(transport.state).toBe("playing");
+    expect(transport.beat).toBe(0.5);
+    expect(context.gains[1].disconnect).toHaveBeenCalled();
+    expect(output.send).toHaveBeenCalledWith([0x91, 33, 64], 0);
+    transport.setDestination(null);
+    expect(output.clear).toHaveBeenCalled();
+    expect(output.send).toHaveBeenLastCalledWith([0x81, 33, 0]);
+    expect(transport.state).toBe("playing");
+    expect(transport.beat).toBe(0.5);
+    expect(context.oscillators).toHaveLength(2);
+    expect(pkg).toEqual(snapshot);
+    transport.dispose();
+  });
+
+  it("preserves a paused position when changing routing", async () => {
+    const transport = new PlaybackTransport(() => {});
+    transport.load(pkg);
+    await transport.play();
+    AudioContextMock.instance.currentTime = 0.25;
+    transport.pause();
+    const output = new MidiOutputMock();
+    transport.setRouting(output as unknown as MIDIOutput, 2);
+    expect(transport.state).toBe("paused");
+    expect(transport.beat).toBe(0.5);
+    await transport.play();
+    expect(output.send).toHaveBeenCalledWith([0x92, 33, 64], 0);
+    transport.dispose();
+  });
+
+  it("pauses at the same position if a profile device is unavailable instead of playing through the synth", async () => {
     const transport = new PlaybackTransport(() => {});
     transport.load(pkg);
     await transport.play();
     const context = AudioContextMock.instance;
-    transport.setDestination(output as unknown as MIDIOutput);
-    expect(transport.state).toBe("stopped");
-    expect(context.gains[1].disconnect).toHaveBeenCalled();
+    context.currentTime = 0.25;
+    const profile = defaultRoutingProfiles().profiles[2];
+    applyRouting(transport, profile.routing, resolveOutput(profile.routing.destination, []));
+    expect(transport.state).toBe("paused");
+    expect(transport.beat).toBe(0.5);
+    expect(context.oscillators).toHaveLength(1);
+    const output = new MidiOutputMock();
+    applyRouting(transport, profile.routing, resolveOutput(profile.routing.destination, [output as unknown as MIDIOutput]));
+    expect(transport.state).toBe("paused");
+    expect(transport.beat).toBe(0.5);
     await transport.play();
-    transport.setDestination(null);
-    expect(output.clear).toHaveBeenCalled();
-    expect(output.send).toHaveBeenLastCalledWith([0x80, 33, 0]);
-    await transport.play();
-    expect(context.oscillators).toHaveLength(2);
+    expect(output.send).toHaveBeenCalledWith([0x91, 33, 64], 0);
     transport.dispose();
   });
 
-  it("stops and reports MIDI failures without leaving a running timer", async () => {
+  it("pauses and reports MIDI failures without losing position or leaving a running timer", async () => {
     const output = new MidiOutputMock();
     const errors = vi.fn();
     const transport = new PlaybackTransport(() => {}, errors);
@@ -268,7 +310,8 @@ describe("preview transport", () => {
     output.state = "disconnected";
     AudioContextMock.instance.currentTime = 1.9;
     vi.advanceTimersByTime(25);
-    expect(transport.state).toBe("stopped");
+    expect(transport.state).toBe("paused");
+    expect(transport.beat).toBe(3.8);
     expect(errors).toHaveBeenCalledWith(expect.stringContaining("MIDI playback failed"));
     expect(vi.getTimerCount()).toBe(0);
     await expect(transport.play()).rejects.toThrow("disconnected");
