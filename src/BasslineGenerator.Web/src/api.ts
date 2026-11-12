@@ -27,6 +27,13 @@ async function json<T>(path: string, body?: unknown): Promise<T> {
   return (await request(path, body)).json() as Promise<T>;
 }
 
+async function midi(path: string, body: GenerationPackage): Promise<Blob> {
+  const response = await request(path, body, true);
+  if (response.headers.get("content-type")?.split(";")[0] !== "audio/midi")
+    throw new Error("The server did not return a MIDI file.");
+  return response.blob();
+}
+
 export const api = {
   presets: () => json<string[]>("/api/presets"),
   progressions: () => json<Progression[]>("/api/progressions"),
@@ -34,12 +41,8 @@ export const api = {
   replay: (body: GenerationPackage) => json<GenerationPackage>("/api/package/regenerate", body),
   share: (body: GenerationPackage) => json<{ shareCode: string }>("/api/share", body),
   decode: (shareCode: string) => json<GenerationPackage>("/api/share/decode", { shareCode }),
-  midi: async (body: GenerationPackage) => {
-    const response = await request("/api/package/midi", body, true);
-    if (response.headers.get("content-type")?.split(";")[0] !== "audio/midi")
-      throw new Error("The server did not return a MIDI file.");
-    return response.blob();
-  },
+  midi: (body: GenerationPackage) => midi("/api/package/midi", body),
+  combinedMidi: (body: GenerationPackage) => midi("/api/package/combined-midi", body),
 };
 
 export function download(blob: Blob, filename: string) {
