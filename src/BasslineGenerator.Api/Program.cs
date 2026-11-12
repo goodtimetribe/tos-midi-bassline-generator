@@ -32,6 +32,7 @@ builder.Services.AddTransient<IRhythmGenerator, RhythmGenerator>();
 builder.Services.AddTransient<BassMovementGenerator>();
 builder.Services.AddTransient<SectionGenerator>();
 builder.Services.AddTransient<MotifGenerator>();
+builder.Services.AddTransient<ChordGenerator>();
 builder.Services.AddTransient<MidiFileFactory>();
 builder.Services.AddTransient<IBassGenerator, BasslineGenerator.Generation.BasslineGenerator>();
 builder.Services.AddTransient<GenerationPackageService>();

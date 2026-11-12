@@ -8,6 +8,7 @@ using BasslineGenerator.Api.Models;
 using BasslineGenerator.Interfaces;
 using BasslineGenerator.Models;
 using BasslineGenerator.MusicTheory;
+using BasslineGenerator.Packaging;
 using Melanchall.DryWetMidi.Core;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Builder;
@@ -107,6 +108,54 @@ public class ApiTests
         Assert.Equal((long)Math.Round(60_000_000.0 / bpm),
             midi.GetTrackChunks().First().Events.OfType<SetTempoEvent>().Single().MicrosecondsPerQuarterNote);
         Assert.Equal(bars * 4L * 480, midi.GetTrackChunks().Last().Events.Sum(e => e.DeltaTime));
+    }
+
+    [Fact]
+    public async Task CombinedPackageMidiReplaysBassAndAddsChordTrack()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        using var generated = await client.PostAsJsonAsync("/api/generate/package", new
+        {
+            rootNote = "A", scaleType = "Minor", style = "Acid", bpm = 120, bars = 2,
+            progression = "i - V - VI - IV", channel = 0, seed = 12345
+        });
+        var package = await generated.Content.ReadFromJsonAsync<GenerationPackage>();
+        Assert.Equal(HttpStatusCode.OK, generated.StatusCode);
+        Assert.NotNull(package);
+
+        using var response = await client.PostAsJsonAsync("/api/package/combined-midi", package);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("audio/midi", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("bassline-and-chords.mid", response.Content.Headers.ContentDisposition?.FileName?.Trim('"'));
+        Assert.True(response.Headers.CacheControl?.NoStore);
+        using var stream = new MemoryStream(await response.Content.ReadAsByteArrayAsync());
+        var midi = MidiFile.Read(stream);
+        var tracks = midi.GetTrackChunks().ToArray();
+        Assert.Equal(MidiFileFormat.MultiTrack, midi.OriginalFormat);
+        Assert.Equal(3, tracks.Length);
+        Assert.All(tracks[1].Events.OfType<NoteOnEvent>(), note => Assert.Equal(0, (int)note.Channel));
+        Assert.All(tracks[2].Events.OfType<NoteOnEvent>(), note => Assert.Equal(1, (int)note.Channel));
+        Assert.Equal(package.Notes!.Count, tracks[1].Events.OfType<NoteOnEvent>().Count());
+        Assert.Equal(6, tracks[2].Events.OfType<NoteOnEvent>().Count());
+    }
+
+    [Fact]
+    public async Task CombinedPackageMidiRejectsInvalidPackage()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        using var generated = await client.PostAsJsonAsync("/api/generate/package", ValidRequest);
+        var package = await generated.Content.ReadFromJsonAsync<GenerationPackage>();
+        Assert.Equal(HttpStatusCode.OK, generated.StatusCode);
+        Assert.NotNull(package);
+
+        using var response = await client.PostAsJsonAsync("/api/package/combined-midi", package with { Version = 2 });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(new ErrorResponse("Package or share code is invalid or unsupported."),
+            await response.Content.ReadFromJsonAsync<ErrorResponse>());
     }
 
     [Theory]
@@ -610,6 +659,10 @@ public class ApiTests
         Assert.True(generate.GetProperty("responses").GetProperty("200").GetProperty("headers").TryGetProperty("X-Generation-Seed", out _));
         Assert.True(generate.GetProperty("responses").GetProperty("400").GetProperty("content").TryGetProperty("application/json", out _));
         Assert.False(generate.GetProperty("responses").GetProperty("400").GetProperty("content").TryGetProperty("audio/midi", out _));
+        var combined = document.RootElement.GetProperty("paths").GetProperty("/api/package/combined-midi").GetProperty("post");
+        Assert.True(combined.GetProperty("requestBody").GetProperty("content").TryGetProperty("application/json", out _));
+        Assert.True(combined.GetProperty("responses").GetProperty("200").GetProperty("content").TryGetProperty("audio/midi", out _));
+        Assert.True(combined.GetProperty("responses").GetProperty("400").GetProperty("content").TryGetProperty("application/json", out _));
 
         foreach (var path in new[] { "analyze", "variation", "arrangement" })
             Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsJsonAsync($"/api/{path}", ValidRequest)).StatusCode);
