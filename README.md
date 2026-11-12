@@ -77,7 +77,9 @@ read-only piano roll, previews the generated notes, downloads MIDI, and supports
 local JSON package files and share codes. The preview uses a lightweight Web
 Audio synthesized bass by default; it may sound different from a DAW. Play,
 pause, stop, and restart control the preview, and synth volume is remembered for
-the current browser session.
+the current browser session. Preview playback is bass-only. Choose **Download
+Bass MIDI** for bass alone or **Download Bass + Chords MIDI** for a Type 1 MIDI
+file with separate bass and sustained chord tracks.
 Draft changes take effect after regeneration, which stops and resets playback.
 
 To play through a MIDI device or virtual port, connect it, select **Refresh
@@ -150,6 +152,7 @@ as the response media type before executing to download MIDI directly.
 | `POST /api/generate/package` | Same request as `/api/generate`; returns a JSON generation package (no MIDI). |
 | `POST /api/package/regenerate` | Replays a saved or edited package and returns a fresh one. |
 | `POST /api/package/midi` | Replays a saved or edited package and returns a downloadable MIDI file. |
+| `POST /api/package/combined-midi` | Replays a package and returns a Type 1 MIDI file with conductor, bass and chord tracks. |
 | `POST /api/share` | Package in, `{"shareCode":"..."}` out. |
 | `POST /api/share/decode` | `{"shareCode":"..."}` in, package out. |
 

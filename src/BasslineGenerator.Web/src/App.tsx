@@ -184,16 +184,21 @@ export default function App() {
     await navigator.clipboard.writeText(value);
     setStatus("Copied to clipboard.");
   });
-  const renderMidi = () => {
+  const renderMidi = (combined: boolean) => {
     if (!result) return;
     void run("Rendering MIDI", async () => {
-      download(await api.midi(result), "bassline.mid");
+      const midi = combined ? await api.combinedMidi(result) : await api.midi(result);
+      download(midi, combined ? "bassline-and-chords.mid" : "bassline.mid");
       setStatus("MIDI download started. Open it in your DAW to audition.");
     });
   };
 
   const activeSection = draftPackage?.effectiveConfiguration.sections[sectionIndex];
   const selectedProgression = catalogs?.progressions.find((p) => p.id === request.progression || p.name === request.progression);
+  const midiActions = <>
+    <button type="button" disabled={!result || !!busy} onClick={() => renderMidi(false)}>Download Bass MIDI</button>
+    <button type="button" className="primary" disabled={!result || !!busy} onClick={() => renderMidi(true)}>Download Bass + Chords MIDI</button>
+  </>;
 
   return <div className="app">
     <header className="topbar"><div><p className="eyebrow">GOOD TIME TRIBE</p><h1>Bassline Generator</h1></div>
@@ -278,12 +283,12 @@ export default function App() {
         </fieldset>
       </form>
       <div className="result">
-        {!result ? <section className="empty card"><p className="eyebrow">YOUR NEXT IDEA STARTS HERE</p><h2>Make room for the low end.</h2><p>Choose your settings and generate a bassline. Listen to the preview, then take the MIDI into your DAW.</p></section> : <>
+        {!result ? <section className="empty card"><p className="eyebrow">YOUR NEXT IDEA STARTS HERE</p><h2>Make room for the low end.</h2><p>Choose your settings and generate a bassline. Listen to the preview, then take the MIDI into your DAW.</p><div className="actions">{midiActions}</div></section> : <>
           <section className="card result-header"><div><p className="eyebrow">GENERATED BASSLINE</p>
             <h2>{result.effectiveConfiguration.rootNote} {result.effectiveConfiguration.scaleType}</h2>
             <p>{result.effectiveConfiguration.bpm} BPM · {result.statistics?.arrangementBars ?? "—"} bars · {result.effectiveConfiguration.progressionName}</p>
             <p className="hint">Seed {result.seed} · Engine {result.engineVersion ?? "legacy 1.0.0"}</p></div>
-            <div className="actions"><button type="button" disabled={!!busy} onClick={save}>Save package</button><button type="button" disabled={!!busy} onClick={share}>Share</button><button type="button" className="primary" disabled={!!busy} onClick={renderMidi}>Download MIDI</button></div>
+            <div className="actions"><button type="button" disabled={!!busy} onClick={save}>Save package</button><button type="button" disabled={!!busy} onClick={share}>Share</button>{midiActions}</div>
           </section>
           {dirty && <p className="warning">Settings changed. The visualization, save, share, and MIDI actions use the previous result. Regenerate to apply changes.</p>}
           <Preview ref={preview} pkg={result} disabled={busy === "Generating bassline"} />

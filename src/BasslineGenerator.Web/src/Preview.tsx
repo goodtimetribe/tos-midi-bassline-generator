@@ -162,6 +162,7 @@ const Preview = forwardRef<PreviewHandle, { pkg: GenerationPackage; disabled: bo
   };
 
   return <section className="card preview" aria-label="Bassline preview">
+    <p className="hint">Preview plays bass only. The Bass + Chords MIDI export includes a separate chord track.</p>
     <div className="routing-profiles" role="group" aria-label="Routing profiles">
       <label>Profile
         <select value={profiles.activeId ?? ""} onChange={(event) => selectProfile(event.target.value)}>
