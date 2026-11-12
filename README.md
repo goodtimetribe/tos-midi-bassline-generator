@@ -84,12 +84,20 @@ To play through a MIDI device or virtual port, connect it, select **Refresh
 Devices**, grant browser MIDI permission, and choose it under **Output**.
 Web MIDI requires a compatible browser and a secure context (HTTPS or
 localhost). Select **MIDI Channel** (1-16) to match the receiving device or
-DAW; the selection is remembered for the current browser session and does not
-change the generated bassline or exported MIDI. Changing channels does not stop
-playback; already scheduled notes finish on their original channel. The synth
-volume control does not affect MIDI velocity. Changing outputs or
-disconnecting the selected device stops playback. Select **Browser Synth** to
-return to the built-in sound.
+DAW; it does not change the generated bassline or exported MIDI. Routing changes preserve the
+playback position. The synth volume control does not affect MIDI velocity.
+Disconnecting a selected device pauses playback at its current position; reconnect
+and refresh, or select another output, before resuming.
+
+Use **Profile** to recall local playback routing. Select a profile, adjust its
+output or channel, and choose **Update Profile** to keep the changes; enter a
+new name and choose **Save Profile** to create another. Profiles and the active
+selection are stored in browser local storage, not in packages, exports, or share
+codes. Circuit Tracks presets automatically match a single connected output
+whose name contains "Circuit Tracks"; if no unique match is found, select the
+device explicitly and update the profile. External MIDI channel presets likewise
+need an output selected. MIDI permission and a connected device are still
+required, and unavailable outputs never silently fall back to the browser synth.
 
 The preview transport schedules package notes against the Web Audio clock with a
 short look-ahead for both outputs. Browser background-tab timer throttling may
