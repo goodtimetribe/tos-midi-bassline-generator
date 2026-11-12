@@ -142,6 +142,34 @@ public class ApiTests
     }
 
     [Fact]
+    public async Task CombinedPackageMidiPreservesMatchingBassAndChordChannels()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        using var generated = await client.PostAsJsonAsync("/api/generate/package", new
+        {
+            rootNote = "A", scaleType = "Minor", style = "Acid", bpm = 120, bars = 1,
+            progression = "i - V - VI - IV", channel = 1, seed = 12345
+        });
+        var package = await generated.Content.ReadFromJsonAsync<GenerationPackage>();
+        Assert.Equal(HttpStatusCode.OK, generated.StatusCode);
+        Assert.NotNull(package);
+
+        using var response = await client.PostAsJsonAsync("/api/package/combined-midi", package);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var stream = new MemoryStream(await response.Content.ReadAsByteArrayAsync());
+        var tracks = MidiFile.Read(stream).GetTrackChunks().ToArray();
+        Assert.Equal(3, tracks.Length);
+        Assert.NotEmpty(tracks[1].Events.OfType<NoteOnEvent>());
+        Assert.NotEmpty(tracks[2].Events.OfType<NoteOnEvent>());
+        Assert.All(tracks.Skip(1).SelectMany(track => track.Events).OfType<NoteOnEvent>(),
+            note => Assert.Equal(1, (int)note.Channel));
+        Assert.All(tracks.Skip(1).SelectMany(track => track.Events).OfType<NoteOffEvent>(),
+            note => Assert.Equal(1, (int)note.Channel));
+    }
+
+    [Fact]
     public async Task CombinedPackageMidiRejectsInvalidPackage()
     {
         await using var factory = new WebApplicationFactory<Program>();

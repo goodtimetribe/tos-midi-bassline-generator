@@ -37,6 +37,15 @@ async function generate() {
   });
 }
 
+async function setBassChannel(channel: number) {
+  const input = [...container.querySelectorAll("label")].find((label) => label.textContent?.includes("MIDI channel (1–16)"))!
+    .querySelector("input")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, String(channel));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
 beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   fetchMock = vi.fn((path: string) => {
@@ -66,6 +75,30 @@ describe("MIDI export actions", () => {
     await generate();
     expect(button("Download Bass MIDI").disabled).toBe(false);
     expect(button("Download Bass + Chords MIDI").disabled).toBe(false);
+  });
+
+  it("warns based on the exported channel, not an unapplied channel change", async () => {
+    await generate();
+    expect(container.textContent).not.toContain("Bass and chords both use MIDI channel 2");
+    await setBassChannel(2);
+    expect(container.textContent).not.toContain("Bass and chords both use MIDI channel 2");
+
+    const collision = { ...pkg, effectiveConfiguration: { ...pkg.effectiveConfiguration, channel: 1 } };
+    fetchMock.mockResolvedValueOnce(json(collision));
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    await generate();
+    expect(container.querySelector(".warning[role='status']")?.textContent).toContain("Bass and chords both use MIDI channel 2");
+    expect(button("Download Bass + Chords MIDI").disabled).toBe(false);
+    await setBassChannel(1);
+    expect(container.textContent).toContain("Bass and chords both use MIDI channel 2");
+
+    fetchMock.mockResolvedValueOnce(new Response("midi", { headers: { "content-type": "audio/midi" } }));
+    vi.stubGlobal("URL", Object.assign(class extends URL {}, { createObjectURL: vi.fn().mockReturnValue("blob:test") }));
+    vi.spyOn(window, "setTimeout").mockImplementation(() => 1);
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    await act(async () => button("Download Bass + Chords MIDI").click());
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/package/combined-midi", expect.objectContaining({ body: JSON.stringify(collision) }));
+    expect(click).toHaveBeenCalledOnce();
   });
 
   it("downloads combined MIDI and disables exports while rendering", async () => {
