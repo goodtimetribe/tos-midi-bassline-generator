@@ -13,6 +13,27 @@ public sealed class MidiFileFactory
         var conductor = new TrackChunk(
             new SetTempoEvent((long)Math.Round(60_000_000.0 / bpm)),
             new TimeSignatureEvent(4, 4));
+        var track = CreateNoteTrack(notes, channel, bars);
+        return new MidiFile(conductor, track) { TimeDivision = new TicksPerQuarterNoteTimeDivision(MusicConstants.Ppq) };
+    }
+
+    /// <summary>Builds a Type 1 MIDI file with separate bass and chord note tracks.</summary>
+    public MidiFile Create(IReadOnlyList<BassNote> bassNotes, int bassChannel,
+        IReadOnlyList<BassNote> chordNotes, int chordChannel, int bpm, int bars)
+    {
+        var conductor = new TrackChunk(
+            new SetTempoEvent((long)Math.Round(60_000_000.0 / bpm)),
+            new TimeSignatureEvent(4, 4));
+        var bassTrack = CreateNoteTrack(bassNotes, bassChannel, bars);
+        var chordTrack = CreateNoteTrack(chordNotes, chordChannel, bars);
+        return new MidiFile(conductor, bassTrack, chordTrack)
+        {
+            TimeDivision = new TicksPerQuarterNoteTimeDivision(MusicConstants.Ppq)
+        };
+    }
+
+    private static TrackChunk CreateNoteTrack(IReadOnlyList<BassNote> notes, int channel, int bars)
+    {
         var events = new List<(long Time, int Order, MidiEvent Event)>();
         foreach (var note in notes)
         {
@@ -28,6 +49,6 @@ public sealed class MidiFileFactory
             previous = item.Time;
         }
         track.Events.Add(new MarkerEvent("End") { DeltaTime = Math.Max(0, (long)bars * MusicConstants.TicksPerBar - previous) });
-        return new MidiFile(conductor, track) { TimeDivision = new TicksPerQuarterNoteTimeDivision(MusicConstants.Ppq) };
+        return track;
     }
 }
